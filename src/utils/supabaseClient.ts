@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 const DEFAULT_SUPABASE_URL = 'https://xyzcompany.supabase.co';
 const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
-// Get values from environment variables with fallbacks to empty strings (not default values yet)
+// Get values from environment variables with fallbacks to empty strings
 const supabaseUrlEnv = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKeyEnv = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
@@ -13,8 +13,8 @@ const supabaseAnonKeyEnv = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const useDefaultCredentials = !supabaseUrlEnv || !supabaseAnonKeyEnv;
 
 // Set final values - only use defaults if environment variables are not available
-const supabaseUrl: string = useDefaultCredentials ? DEFAULT_SUPABASE_URL : supabaseUrlEnv;
-const supabaseAnonKey: string = useDefaultCredentials ? DEFAULT_SUPABASE_KEY : supabaseAnonKeyEnv;
+const supabaseUrl = useDefaultCredentials ? DEFAULT_SUPABASE_URL : supabaseUrlEnv;
+const supabaseAnonKey = useDefaultCredentials ? DEFAULT_SUPABASE_KEY : supabaseAnonKeyEnv;
 
 // Log a warning if we're using the default values in production
 if (useDefaultCredentials && import.meta.env.MODE === 'production') {
@@ -22,7 +22,7 @@ if (useDefaultCredentials && import.meta.env.MODE === 'production') {
 }
 
 // Create a singleton for the Supabase client
-let supabaseClientInstance: ReturnType<typeof createClient> | null = null;
+let supabaseClientInstance = null;
 
 try {
   // Double check we have valid string values before creating the client
@@ -30,6 +30,8 @@ try {
       supabaseUrl.trim() !== '' && 
       typeof supabaseAnonKey === 'string' && 
       supabaseAnonKey.trim() !== '') {
+    
+    console.log('Creating Supabase client with URL:', supabaseUrl.substring(0, 15) + '...');
     
     supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -51,7 +53,7 @@ try {
 export const supabaseClient = supabaseClientInstance;
 
 // Add a helper to check if we're connected to a real Supabase instance
-export const isUsingRealSupabase = (): boolean => {
+export const isUsingRealSupabase = () => {
   return (
     typeof supabaseUrl === 'string' &&
     supabaseUrl !== '' &&

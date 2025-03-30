@@ -5,6 +5,8 @@ import App from './App.tsx';
 import './index.css';
 import { supabaseClient } from './utils/supabaseClient';
 
+console.log('Starting application...');
+
 // Log and check Supabase client initialization status
 if (supabaseClient === null) {
   console.log('Supabase client could not be initialized. The app will use localStorage for data storage.');
@@ -24,6 +26,7 @@ if (supabaseClient === null) {
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
 
+console.log('Rendering React app...');
 createRoot(rootElement).render(<App />);
 
 // Register service worker
