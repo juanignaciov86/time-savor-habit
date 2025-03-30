@@ -1,6 +1,6 @@
 
 // Habit management utilities
-import { supabaseClient } from './supabaseClient';
+import { supabaseClient, isUsingRealSupabase } from './supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface Habit {
@@ -29,6 +29,13 @@ export const getHabitsSync = (): Habit[] => {
 // Get all habits - async version for database operations
 export const getHabits = async (): Promise<Habit[]> => {
   try {
+    // Check if we're using a real Supabase instance
+    if (!isUsingRealSupabase()) {
+      console.log('Using localStorage fallback for habits (no Supabase URL configured)');
+      const data = localStorage.getItem(STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    }
+
     const user = await supabaseClient.auth.getUser();
     const userId = user.data.user?.id;
     
@@ -64,6 +71,12 @@ export const getHabits = async (): Promise<Habit[]> => {
 // Get a single habit by ID
 export const getHabitById = async (id: string): Promise<Habit | undefined> => {
   try {
+    if (!isUsingRealSupabase()) {
+      // Fallback to localStorage
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      return habits.find((h: Habit) => h.id === id);
+    }
+    
     const { data, error } = await supabaseClient
       .from('habits')
       .select('*')
@@ -89,38 +102,43 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
 // Add a new habit
 export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>): Promise<Habit> => {
   try {
-    const user = supabaseClient.auth.getUser();
-    const userId = (await user).data.user?.id;
-    
     const newHabit = {
       ...habit,
       id: uuidv4(),
       createdAt: Date.now(),
-      userId: userId || 'anonymous'
+      userId: 'anonymous'
     };
     
-    if (!userId) {
-      // Fallback to localStorage if not authenticated
-      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      habits.push(newHabit);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-      return newHabit;
+    if (isUsingRealSupabase()) {
+      const user = supabaseClient.auth.getUser();
+      const userId = (await user).data.user?.id;
+      
+      if (userId) {
+        newHabit.userId = userId;
+        
+        const { data, error } = await supabaseClient
+          .from('habits')
+          .insert([newHabit])
+          .select();
+        
+        if (error) {
+          console.error('Error adding habit:', error);
+        } else if (data) {
+          // Store in localStorage as backup
+          const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+          habits.push(data[0]);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+          return data[0];
+        }
+      }
     }
     
-    const { data, error } = await supabaseClient
-      .from('habits')
-      .insert([newHabit])
-      .select();
+    // Fallback to localStorage
+    const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    habits.push(newHabit);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
     
-    if (error) {
-      console.error('Error adding habit:', error);
-      // Fallback to localStorage
-      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      habits.push(newHabit);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-    }
-    
-    return data ? data[0] : newHabit;
+    return newHabit;
   } catch (error) {
     console.error('Failed to add habit:', error);
     
@@ -143,6 +161,22 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
 // Update an existing habit
 export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' | 'createdAt' | 'userId'>>): Promise<Habit | null> => {
   try {
+    if (!isUsingRealSupabase()) {
+      // Fallback to localStorage
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      const habitIndex = habits.findIndex((h: Habit) => h.id === id);
+      
+      if (habitIndex === -1) return null;
+      
+      habits[habitIndex] = {
+        ...habits[habitIndex],
+        ...updates
+      };
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+      return habits[habitIndex];
+    }
+    
     const { data, error } = await supabaseClient
       .from('habits')
       .update(updates)
@@ -282,6 +316,12 @@ export const importHabits = async (jsonData: string): Promise<boolean> => {
 // Initialize Supabase table if it doesn't exist
 export const initializeSupabaseSync = async () => {
   try {
+    // Skip sync if not using real Supabase
+    if (!isUsingRealSupabase()) {
+      console.log('Skipping Supabase sync (using demo/local mode)');
+      return;
+    }
+    
     // Check if the user is authenticated
     const { data: { user } } = await supabaseClient.auth.getUser();
     

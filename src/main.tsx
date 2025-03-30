@@ -6,9 +6,14 @@ import './index.css';
 import { initializeSupabaseSync } from './utils/habitUtils';
 
 // Initialize Supabase connection and sync data
-initializeSupabaseSync().catch(error => {
-  console.error('Failed to initialize Supabase:', error);
-});
+// Using a try-catch to prevent app from crashing if Supabase initialization fails
+try {
+  initializeSupabaseSync().catch(error => {
+    console.error('Failed to initialize Supabase:', error);
+  });
+} catch (error) {
+  console.error('Error during Supabase initialization:', error);
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
