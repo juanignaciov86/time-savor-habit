@@ -1,5 +1,6 @@
 
 // Habit management utilities
+import { supabaseClient } from './supabaseClient';
 
 export interface Habit {
   id: string;
@@ -7,6 +8,7 @@ export interface Habit {
   description: string;
   color: string;
   createdAt: number;
+  userId?: string; // For future use with authentication
 }
 
 const STORAGE_KEY = 'time-savor-habits';
@@ -98,3 +100,10 @@ export const importHabits = (jsonData: string): boolean => {
     return false;
   }
 };
+
+// For future implementation with Supabase
+export const initializeSupabaseSync = async () => {
+  // This function will be implemented when connecting to Supabase
+  console.log("Supabase sync not yet implemented");
+};
+
