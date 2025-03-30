@@ -4,6 +4,12 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { initializeSupabaseSync } from './utils/habitUtils';
+import { supabaseClient } from './utils/supabaseClient';
+
+// Check if Supabase client initialized correctly
+if (!supabaseClient) {
+  console.error('Failed to initialize Supabase client. Using local storage fallback.');
+}
 
 // Initialize Supabase connection and sync data
 // Using a try-catch to prevent app from crashing if Supabase initialization fails

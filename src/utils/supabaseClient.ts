@@ -6,6 +6,7 @@ const DEFAULT_SUPABASE_URL = 'https://xyzcompany.supabase.co';
 const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 // Get values from environment variables or use defaults
+// Make sure they are non-empty strings to satisfy Supabase client requirements
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
 
@@ -18,13 +19,18 @@ if (
 }
 
 // Create a Supabase client with default offline capabilities
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+// Ensure we're passing valid strings to avoid the "supabaseUrl is required" error
+export const supabaseClient = createClient(
+  String(supabaseUrl),
+  String(supabaseAnonKey),
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
 
 // Add a helper to check if we're connected to a real Supabase instance
 export const isUsingRealSupabase = (): boolean => {
