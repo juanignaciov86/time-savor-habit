@@ -1,48 +1,15 @@
 
-// This is a placeholder for the future Supabase client implementation
-// To implement database synchronization, this file will need to be updated with actual Supabase credentials
+import { createClient } from '@supabase/supabase-js';
 
-export const supabaseClient = {
-  // This will be replaced with the actual Supabase client when connected
-  from: (table: string) => {
-    console.log(`Supabase operation on ${table} - not yet implemented`);
-    return {
-      select: () => ({
-        eq: () => ({
-          then: (callback: Function) => {
-            console.log('Supabase not yet connected');
-            callback({ data: [], error: null });
-          }
-        })
-      }),
-      insert: () => ({
-        then: (callback: Function) => {
-          console.log('Supabase not yet connected');
-          callback({ data: null, error: null });
-        }
-      }),
-      update: () => ({
-        eq: () => ({
-          then: (callback: Function) => {
-            console.log('Supabase not yet connected');
-            callback({ data: null, error: null });
-          }
-        })
-      }),
-      delete: () => ({
-        eq: () => ({
-          then: (callback: Function) => {
-            console.log('Supabase not yet connected');
-            callback({ data: null, error: null });
-          }
-        })
-      })
-    };
-  },
-  auth: {
-    onAuthStateChange: (callback: Function) => {
-      console.log('Auth state change listener - not yet implemented');
-      return { data: { subscription: { unsubscribe: () => {} } } };
-    }
-  }
-};
+// Initialize the Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Supabase URL or Anon Key not found in environment variables');
+}
+
+export const supabaseClient = createClient(
+  supabaseUrl || '',
+  supabaseAnonKey || ''
+);

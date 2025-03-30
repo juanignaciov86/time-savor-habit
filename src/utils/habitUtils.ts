@@ -1,6 +1,6 @@
-
 // Habit management utilities
 import { supabaseClient } from './supabaseClient';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface Habit {
   id: string;
@@ -8,75 +8,213 @@ export interface Habit {
   description: string;
   color: string;
   createdAt: number;
-  userId?: string; // For future use with authentication
+  userId: string; // User ID from Supabase Auth
 }
 
-const STORAGE_KEY = 'time-savor-habits';
+const STORAGE_KEY = 'time-savor-habits'; // Kept for fallback
 
 // Get all habits
-export const getHabits = (): Habit[] => {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+export const getHabits = async (): Promise<Habit[]> => {
+  try {
+    const user = supabaseClient.auth.getUser();
+    const userId = (await user).data.user?.id;
+    
+    if (!userId) {
+      // Fallback to localStorage if not authenticated
+      const data = localStorage.getItem(STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    }
+
+    const { data, error } = await supabaseClient
+      .from('habits')
+      .select('*')
+      .eq('userId', userId);
+
+    if (error) {
+      console.error('Error fetching habits:', error);
+      // Fallback to localStorage
+      const localData = localStorage.getItem(STORAGE_KEY);
+      return localData ? JSON.parse(localData) : [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Failed to get habits:', error);
+    // Fallback to localStorage
+    const data = localStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  }
 };
 
 // Get a single habit by ID
-export const getHabitById = (id: string): Habit | undefined => {
-  const habits = getHabits();
-  return habits.find(habit => habit.id === id);
+export const getHabitById = async (id: string): Promise<Habit | undefined> => {
+  try {
+    const { data, error } = await supabaseClient
+      .from('habits')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching habit:', error);
+      // Fallback to localStorage
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      return habits.find((h: Habit) => h.id === id);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Failed to get habit by ID:', error);
+    // Fallback to localStorage
+    const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    return habits.find((h: Habit) => h.id === id);
+  }
 };
 
 // Add a new habit
-export const addHabit = (habit: Omit<Habit, 'id' | 'createdAt'>): Habit => {
-  const habits = getHabits();
-  const newHabit = {
-    ...habit,
-    id: Math.random().toString(36).substring(2, 9),
-    createdAt: Date.now()
-  };
-  
-  habits.push(newHabit);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-  
-  return newHabit;
+export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>): Promise<Habit> => {
+  try {
+    const user = supabaseClient.auth.getUser();
+    const userId = (await user).data.user?.id;
+    
+    const newHabit = {
+      ...habit,
+      id: uuidv4(),
+      createdAt: Date.now(),
+      userId: userId || 'anonymous'
+    };
+    
+    if (!userId) {
+      // Fallback to localStorage if not authenticated
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      habits.push(newHabit);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+      return newHabit;
+    }
+    
+    const { data, error } = await supabaseClient
+      .from('habits')
+      .insert([newHabit])
+      .select();
+    
+    if (error) {
+      console.error('Error adding habit:', error);
+      // Fallback to localStorage
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      habits.push(newHabit);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+    }
+    
+    return data ? data[0] : newHabit;
+  } catch (error) {
+    console.error('Failed to add habit:', error);
+    
+    // Fallback to localStorage
+    const newHabit = {
+      ...habit,
+      id: uuidv4(),
+      createdAt: Date.now(),
+      userId: 'anonymous'
+    };
+    
+    const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    habits.push(newHabit);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+    
+    return newHabit;
+  }
 };
 
 // Update an existing habit
-export const updateHabit = (id: string, updates: Partial<Omit<Habit, 'id' | 'createdAt'>>): Habit | null => {
-  const habits = getHabits();
-  const habitIndex = habits.findIndex(habit => habit.id === id);
-  
-  if (habitIndex === -1) return null;
-  
-  habits[habitIndex] = {
-    ...habits[habitIndex],
-    ...updates
-  };
-  
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-  
-  return habits[habitIndex];
+export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' | 'createdAt' | 'userId'>>): Promise<Habit | null> => {
+  try {
+    const { data, error } = await supabaseClient
+      .from('habits')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error updating habit:', error);
+      // Fallback to localStorage
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      const habitIndex = habits.findIndex((h: Habit) => h.id === id);
+      
+      if (habitIndex === -1) return null;
+      
+      habits[habitIndex] = {
+        ...habits[habitIndex],
+        ...updates
+      };
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+      return habits[habitIndex];
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Failed to update habit:', error);
+    
+    // Fallback to localStorage
+    const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const habitIndex = habits.findIndex((h: Habit) => h.id === id);
+    
+    if (habitIndex === -1) return null;
+    
+    habits[habitIndex] = {
+      ...habits[habitIndex],
+      ...updates
+    };
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+    return habits[habitIndex];
+  }
 };
 
 // Delete a habit
-export const deleteHabit = (id: string): boolean => {
-  const habits = getHabits();
-  const filteredHabits = habits.filter(habit => habit.id !== id);
-  
-  if (filteredHabits.length === habits.length) return false;
-  
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
-  
-  return true;
+export const deleteHabit = async (id: string): Promise<boolean> => {
+  try {
+    const { error } = await supabaseClient
+      .from('habits')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      console.error('Error deleting habit:', error);
+      // Fallback to localStorage
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      const filteredHabits = habits.filter((h: Habit) => h.id !== id);
+      
+      if (filteredHabits.length === habits.length) return false;
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
+      return true;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to delete habit:', error);
+    
+    // Fallback to localStorage
+    const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const filteredHabits = habits.filter((h: Habit) => h.id !== id);
+    
+    if (filteredHabits.length === habits.length) return false;
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
+    return true;
+  }
 };
 
 // Export habits data
-export const exportHabits = (): string => {
-  const habits = getHabits();
+export const exportHabits = async (): Promise<string> => {
+  const habits = await getHabits();
   return JSON.stringify(habits);
 };
 
 // Import habits data
-export const importHabits = (jsonData: string): boolean => {
+export const importHabits = async (jsonData: string): Promise<boolean> => {
   try {
     const habits = JSON.parse(jsonData) as Habit[];
     
@@ -93,7 +231,32 @@ export const importHabits = (jsonData: string): boolean => {
       return false;
     }
     
-    localStorage.setItem(STORAGE_KEY, jsonData);
+    const user = supabaseClient.auth.getUser();
+    const userId = (await user).data.user?.id;
+    
+    if (!userId) {
+      // Fallback to localStorage
+      localStorage.setItem(STORAGE_KEY, jsonData);
+      return true;
+    }
+    
+    // Update userId for all habits
+    const habitsWithUserId = habits.map(h => ({
+      ...h,
+      userId
+    }));
+    
+    // Insert into Supabase (upsert to handle existing records)
+    const { error } = await supabaseClient
+      .from('habits')
+      .upsert(habitsWithUserId, { onConflict: 'id' });
+    
+    if (error) {
+      console.error('Error importing habits to Supabase:', error);
+      // Fallback to localStorage
+      localStorage.setItem(STORAGE_KEY, jsonData);
+    }
+    
     return true;
   } catch (error) {
     console.error('Failed to import habits:', error);
@@ -101,9 +264,44 @@ export const importHabits = (jsonData: string): boolean => {
   }
 };
 
-// For future implementation with Supabase
+// Initialize Supabase table if it doesn't exist
 export const initializeSupabaseSync = async () => {
-  // This function will be implemented when connecting to Supabase
-  console.log("Supabase sync not yet implemented");
+  try {
+    // Check if the user is authenticated
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    
+    if (user) {
+      console.log('User is authenticated, syncing data');
+      
+      // Check if we have local data to migrate
+      const localData = localStorage.getItem(STORAGE_KEY);
+      if (localData) {
+        const localHabits = JSON.parse(localData) as Habit[];
+        
+        if (localHabits.length > 0) {
+          // Update all local habits with the user's ID
+          const habitsWithUserId = localHabits.map(habit => ({
+            ...habit,
+            userId: user.id
+          }));
+          
+          // Insert into Supabase
+          const { error } = await supabaseClient
+            .from('habits')
+            .upsert(habitsWithUserId, { onConflict: 'id' });
+            
+          if (!error) {
+            console.log('Local habits migrated to Supabase');
+            // Clear local storage after successful migration
+            // Don't clear yet, keep as backup
+            // localStorage.removeItem(STORAGE_KEY);
+          } else {
+            console.error('Failed to migrate local habits:', error);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Supabase sync error:', error);
+  }
 };
-

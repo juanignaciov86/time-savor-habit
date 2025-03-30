@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash, Edit, Check, X, Share, Download } from 'lucide-react';
+import { supabaseClient } from '../utils/supabaseClient';
+import { Plus, Trash, Edit, Check, X, Share, Download, Loader2 } from 'lucide-react';
 import { 
   Habit, 
   getHabits, 
@@ -14,7 +15,8 @@ import {
   updateHabit, 
   deleteHabit,
   exportHabits,
-  importHabits
+  importHabits,
+  initializeSupabaseSync
 } from '../utils/habitUtils';
 
 const HabitsPage: React.FC = () => {
@@ -28,11 +30,39 @@ const HabitsPage: React.FC = () => {
   });
   const [importValue, setImportValue] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // Load habits
+  // Load habits and initialize sync
   useEffect(() => {
-    setHabits(getHabits());
+    const loadHabits = async () => {
+      setIsLoading(true);
+      // Initialize Supabase sync
+      await initializeSupabaseSync();
+      
+      // Load habits from Supabase
+      const habitsList = await getHabits();
+      setHabits(habitsList);
+      setIsLoading(false);
+    };
+    
+    loadHabits();
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+      async (event) => {
+        if (event === 'SIGNED_IN') {
+          // Reload habits after sign-in
+          const habitsList = await getHabits();
+          setHabits(habitsList);
+        }
+      }
+    );
+    
+    // Cleanup subscription
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Reset form
@@ -49,30 +79,41 @@ const HabitsPage: React.FC = () => {
   };
 
   // Handle form submit
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     
-    if (editingId) {
-      // Update existing habit
-      const updatedHabit = updateHabit(editingId, formData);
-      if (updatedHabit) {
-        setHabits(habits.map(h => h.id === editingId ? updatedHabit : h));
+    try {
+      if (editingId) {
+        // Update existing habit
+        const updatedHabit = await updateHabit(editingId, formData);
+        if (updatedHabit) {
+          setHabits(habits.map(h => h.id === editingId ? updatedHabit : h));
+          toast({
+            title: "Habit updated",
+            description: `${updatedHabit.name} has been updated.`
+          });
+        }
+      } else {
+        // Add new habit
+        const newHabit = await addHabit(formData);
+        setHabits([...habits, newHabit]);
         toast({
-          title: "Habit updated",
-          description: `${updatedHabit.name} has been updated.`
+          title: "Habit added",
+          description: `${newHabit.name} has been added.`
         });
       }
-    } else {
-      // Add new habit
-      const newHabit = addHabit(formData);
-      setHabits([...habits, newHabit]);
+    } catch (error) {
+      console.error("Error saving habit:", error);
       toast({
-        title: "Habit added",
-        description: `${newHabit.name} has been added.`
+        title: "Error",
+        description: "Failed to save habit. Please try again.",
+        variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
+      resetForm();
     }
-    
-    resetForm();
   };
 
   // Handle edit
@@ -87,34 +128,58 @@ const HabitsPage: React.FC = () => {
   };
 
   // Handle delete
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this habit?')) {
-      const success = deleteHabit(id);
-      if (success) {
-        setHabits(habits.filter(h => h.id !== id));
+      setIsLoading(true);
+      try {
+        const success = await deleteHabit(id);
+        if (success) {
+          setHabits(habits.filter(h => h.id !== id));
+          toast({
+            title: "Habit deleted",
+            description: "The habit has been removed."
+          });
+        }
+      } catch (error) {
+        console.error("Error deleting habit:", error);
         toast({
-          title: "Habit deleted",
-          description: "The habit has been removed."
+          title: "Error",
+          description: "Failed to delete habit. Please try again.",
+          variant: "destructive"
         });
+      } finally {
+        setIsLoading(false);
       }
     }
   };
 
   // Handle export
-  const handleExport = () => {
-    const data = exportHabits();
-    
-    // Create shareable content
-    if (navigator.share) {
-      navigator.share({
-        title: 'Time Savor Habits',
-        text: data
-      }).catch(error => {
-        console.log('Error sharing', error);
+  const handleExport = async () => {
+    try {
+      setIsLoading(true);
+      const data = await exportHabits();
+      
+      // Create shareable content
+      if (navigator.share) {
+        navigator.share({
+          title: 'Time Savor Habits',
+          text: data
+        }).catch(error => {
+          console.log('Error sharing', error);
+          copyToClipboard(data);
+        });
+      } else {
         copyToClipboard(data);
+      }
+    } catch (error) {
+      console.error("Error exporting habits:", error);
+      toast({
+        title: "Error",
+        description: "Failed to export habits. Please try again.",
+        variant: "destructive"
       });
-    } else {
-      copyToClipboard(data);
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -132,7 +197,7 @@ const HabitsPage: React.FC = () => {
   };
 
   // Handle import
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!importValue.trim()) {
       toast({
         title: "Import failed",
@@ -142,23 +207,36 @@ const HabitsPage: React.FC = () => {
       return;
     }
 
-    const success = importHabits(importValue);
-    
-    if (success) {
-      // Reload habits
-      setHabits(getHabits());
-      setShowImport(false);
-      setImportValue('');
+    setIsLoading(true);
+    try {
+      const success = await importHabits(importValue);
+      
+      if (success) {
+        // Reload habits
+        const habitsList = await getHabits();
+        setHabits(habitsList);
+        setShowImport(false);
+        setImportValue('');
+        toast({
+          title: "Import successful",
+          description: "Your habits have been imported"
+        });
+      } else {
+        toast({
+          title: "Import failed",
+          description: "Invalid data format",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Error importing habits:", error);
       toast({
-        title: "Import successful",
-        description: "Your habits have been imported"
-      });
-    } else {
-      toast({
-        title: "Import failed",
-        description: "Invalid data format",
+        title: "Error",
+        description: "Failed to import habits. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -176,8 +254,9 @@ const HabitsPage: React.FC = () => {
             onClick={() => setShowForm(true)}
             className="flex items-center"
             variant={showForm ? "secondary" : "default"}
+            disabled={isLoading}
           >
-            <Plus className="mr-1 h-4 w-4" /> Add Habit
+            {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />} Add Habit
           </Button>
         </div>
         <div className="space-x-2">
@@ -185,6 +264,7 @@ const HabitsPage: React.FC = () => {
             onClick={() => setShowImport(prev => !prev)}
             variant="outline"
             className="flex items-center"
+            disabled={isLoading}
           >
             <Download className="mr-1 h-4 w-4" /> Import
           </Button>
@@ -192,6 +272,7 @@ const HabitsPage: React.FC = () => {
             onClick={handleExport}
             variant="outline"
             className="flex items-center"
+            disabled={isLoading}
           >
             <Share className="mr-1 h-4 w-4" /> Export
           </Button>
@@ -210,6 +291,7 @@ const HabitsPage: React.FC = () => {
                 onChange={(e) => setImportValue(e.target.value)}
                 placeholder="Paste the exported habit data here"
                 rows={4}
+                disabled={isLoading}
               />
             </div>
             <div className="flex justify-end space-x-2">
@@ -218,11 +300,16 @@ const HabitsPage: React.FC = () => {
                 variant="outline"
                 onClick={() => { setShowImport(false); setImportValue(''); }}
                 className="flex items-center"
+                disabled={isLoading}
               >
                 <X className="mr-1 h-4 w-4" /> Cancel
               </Button>
-              <Button type="submit" className="flex items-center">
-                <Check className="mr-1 h-4 w-4" /> Import
+              <Button 
+                type="submit" 
+                className="flex items-center"
+                disabled={isLoading}
+              >
+                {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />} Import
               </Button>
             </div>
           </form>
@@ -242,6 +329,7 @@ const HabitsPage: React.FC = () => {
                 onChange={handleChange}
                 placeholder="e.g., Reading"
                 required
+                disabled={isLoading}
               />
             </div>
             
@@ -254,6 +342,7 @@ const HabitsPage: React.FC = () => {
                 onChange={handleChange}
                 placeholder="Add some details about this habit"
                 rows={3}
+                disabled={isLoading}
               />
             </div>
             
@@ -267,6 +356,7 @@ const HabitsPage: React.FC = () => {
                   value={formData.color}
                   onChange={handleChange}
                   className="w-12 h-10 p-1"
+                  disabled={isLoading}
                 />
                 <span className="text-ios-gray text-sm">
                   Choose a color for this habit
@@ -280,12 +370,17 @@ const HabitsPage: React.FC = () => {
                 variant="outline"
                 onClick={resetForm}
                 className="flex items-center"
+                disabled={isLoading}
               >
                 <X className="mr-1 h-4 w-4" />
                 Cancel
               </Button>
-              <Button type="submit" className="flex items-center">
-                <Check className="mr-1 h-4 w-4" />
+              <Button 
+                type="submit" 
+                className="flex items-center"
+                disabled={isLoading}
+              >
+                {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
                 {editingId ? "Update" : "Add"} Habit
               </Button>
             </div>
@@ -293,45 +388,57 @@ const HabitsPage: React.FC = () => {
         </div>
       ) : null}
 
+      {/* Loading State */}
+      {isLoading && habits.length === 0 && (
+        <div className="ios-card p-6 flex justify-center items-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading habits...</span>
+        </div>
+      )}
+
       {/* Habits List */}
-      <div className="space-y-4">
-        {habits.length === 0 ? (
-          <div className="ios-card p-6 text-center">
-            <p className="text-ios-gray">No habits added yet. Create your first habit!</p>
-          </div>
-        ) : (
-          habits.map(habit => (
-            <div 
-              key={habit.id} 
-              className="ios-card p-4 flex justify-between items-center"
-              style={{ borderLeft: `4px solid ${habit.color}` }}
-            >
-              <div>
-                <h3 className="font-medium">{habit.name}</h3>
-                {habit.description && (
-                  <p className="text-sm text-ios-gray">{habit.description}</p>
-                )}
-              </div>
-              <div className="flex space-x-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleEdit(habit)}
-                >
-                  <Edit className="h-4 w-4 text-ios-gray" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleDelete(habit.id)}
-                >
-                  <Trash className="h-4 w-4 text-ios-gray" />
-                </Button>
-              </div>
+      {!isLoading && (
+        <div className="space-y-4">
+          {habits.length === 0 ? (
+            <div className="ios-card p-6 text-center">
+              <p className="text-ios-gray">No habits added yet. Create your first habit!</p>
             </div>
-          ))
-        )}
-      </div>
+          ) : (
+            habits.map(habit => (
+              <div 
+                key={habit.id} 
+                className="ios-card p-4 flex justify-between items-center"
+                style={{ borderLeft: `4px solid ${habit.color}` }}
+              >
+                <div>
+                  <h3 className="font-medium">{habit.name}</h3>
+                  {habit.description && (
+                    <p className="text-sm text-ios-gray">{habit.description}</p>
+                  )}
+                </div>
+                <div className="flex space-x-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleEdit(habit)}
+                    disabled={isLoading}
+                  >
+                    <Edit className="h-4 w-4 text-ios-gray" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleDelete(habit.id)}
+                    disabled={isLoading}
+                  >
+                    <Trash className="h-4 w-4 text-ios-gray" />
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </Layout>
   );
 };
