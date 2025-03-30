@@ -30,7 +30,7 @@ export const getHabitsSync = (): Habit[] => {
 export const getHabits = async (): Promise<Habit[]> => {
   try {
     // Check if we're using a real Supabase instance
-    if (!isUsingRealSupabase()) {
+    if (!isUsingRealSupabase() || !supabaseClient) {
       console.log('Using localStorage fallback for habits (no Supabase URL configured)');
       const data = localStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : [];
@@ -57,9 +57,12 @@ export const getHabits = async (): Promise<Habit[]> => {
       return localData ? JSON.parse(localData) : [];
     }
 
+    // Cast data to Habit[] to fix TypeScript errors
+    const habitsData = data as Habit[];
+    
     // Also store in localStorage as backup
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data || []));
-    return data || [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(habitsData));
+    return habitsData;
   } catch (error) {
     console.error('Failed to get habits:', error);
     // Fallback to localStorage
@@ -71,7 +74,7 @@ export const getHabits = async (): Promise<Habit[]> => {
 // Get a single habit by ID
 export const getHabitById = async (id: string): Promise<Habit | undefined> => {
   try {
-    if (!isUsingRealSupabase()) {
+    if (!isUsingRealSupabase() || !supabaseClient) {
       // Fallback to localStorage
       const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       return habits.find((h: Habit) => h.id === id);
@@ -90,7 +93,7 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
       return habits.find((h: Habit) => h.id === id);
     }
     
-    return data;
+    return data as Habit;
   } catch (error) {
     console.error('Failed to get habit by ID:', error);
     // Fallback to localStorage
@@ -102,14 +105,14 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
 // Add a new habit
 export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>): Promise<Habit> => {
   try {
-    const newHabit = {
+    const newHabit: Habit = {
       ...habit,
       id: uuidv4(),
       createdAt: Date.now(),
       userId: 'anonymous'
     };
     
-    if (isUsingRealSupabase()) {
+    if (isUsingRealSupabase() && supabaseClient) {
       const user = supabaseClient.auth.getUser();
       const userId = (await user).data.user?.id;
       
@@ -126,9 +129,9 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
         } else if (data) {
           // Store in localStorage as backup
           const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-          habits.push(data[0]);
+          habits.push(data[0] as Habit);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-          return data[0];
+          return data[0] as Habit;
         }
       }
     }
@@ -143,7 +146,7 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
     console.error('Failed to add habit:', error);
     
     // Fallback to localStorage
-    const newHabit = {
+    const newHabit: Habit = {
       ...habit,
       id: uuidv4(),
       createdAt: Date.now(),
@@ -161,7 +164,7 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
 // Update an existing habit
 export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' | 'createdAt' | 'userId'>>): Promise<Habit | null> => {
   try {
-    if (!isUsingRealSupabase()) {
+    if (!isUsingRealSupabase() || !supabaseClient) {
       // Fallback to localStorage
       const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       const habitIndex = habits.findIndex((h: Habit) => h.id === id);
@@ -201,7 +204,7 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
       return habits[habitIndex];
     }
     
-    return data;
+    return data as Habit;
   } catch (error) {
     console.error('Failed to update habit:', error);
     
@@ -224,6 +227,17 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
 // Delete a habit
 export const deleteHabit = async (id: string): Promise<boolean> => {
   try {
+    if (!isUsingRealSupabase() || !supabaseClient) {
+      // Fallback to localStorage
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      const filteredHabits = habits.filter((h: Habit) => h.id !== id);
+      
+      if (filteredHabits.length === habits.length) return false;
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
+      return true;
+    }
+
     const { error } = await supabaseClient
       .from('habits')
       .delete()
@@ -280,6 +294,12 @@ export const importHabits = async (jsonData: string): Promise<boolean> => {
       return false;
     }
     
+    if (!isUsingRealSupabase() || !supabaseClient) {
+      // Fallback to localStorage
+      localStorage.setItem(STORAGE_KEY, jsonData);
+      return true;
+    }
+
     const user = supabaseClient.auth.getUser();
     const userId = (await user).data.user?.id;
     
@@ -316,8 +336,8 @@ export const importHabits = async (jsonData: string): Promise<boolean> => {
 // Initialize Supabase table if it doesn't exist
 export const initializeSupabaseSync = async () => {
   try {
-    // Skip sync if not using real Supabase
-    if (!isUsingRealSupabase()) {
+    // Skip sync if not using real Supabase or if client is null
+    if (!isUsingRealSupabase() || !supabaseClient) {
       console.log('Skipping Supabase sync (using demo/local mode)');
       return;
     }

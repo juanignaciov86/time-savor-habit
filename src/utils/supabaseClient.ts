@@ -6,8 +6,8 @@ const DEFAULT_SUPABASE_URL = 'https://xyzcompany.supabase.co';
 const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 // Get values from environment variables or use defaults
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
+const supabaseUrl: string = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey: string = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
 
 // Log a warning if we're using the default values in production
 if (
@@ -21,9 +21,13 @@ if (
 let supabaseClientInstance: ReturnType<typeof createClient> | null = null;
 
 try {
-  // Only create the client if we have valid strings
-  if (typeof supabaseUrl === 'string' && supabaseUrl && 
-      typeof supabaseAnonKey === 'string' && supabaseAnonKey) {
+  // Ensure we're passing non-empty strings to avoid the "supabaseUrl is required" error
+  if (
+    typeof supabaseUrl === 'string' && 
+    supabaseUrl !== '' &&
+    typeof supabaseAnonKey === 'string' && 
+    supabaseAnonKey !== ''
+  ) {
     supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
@@ -31,6 +35,7 @@ try {
         detectSessionInUrl: true,
       },
     });
+    console.log('Supabase client created successfully');
   } else {
     console.error('Invalid Supabase URL or Anon Key');
   }
