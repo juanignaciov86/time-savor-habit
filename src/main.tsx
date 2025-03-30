@@ -8,17 +8,23 @@ import { supabaseClient } from './utils/supabaseClient';
 
 // Check if Supabase client initialized correctly
 if (!supabaseClient) {
-  console.error('Failed to initialize Supabase client. Using local storage fallback.');
+  console.log('No Supabase client available. The app will use localStorage for data storage.');
+} else {
+  console.log('Supabase client initialized successfully.');
 }
 
-// Initialize Supabase connection and sync data
+// Initialize Supabase connection and sync data only if client exists
 // Using a try-catch to prevent app from crashing if Supabase initialization fails
-try {
-  initializeSupabaseSync().catch(error => {
-    console.error('Failed to initialize Supabase:', error);
-  });
-} catch (error) {
-  console.error('Error during Supabase initialization:', error);
+if (supabaseClient) {
+  try {
+    initializeSupabaseSync().catch(error => {
+      console.error('Failed to initialize Supabase:', error);
+    });
+  } catch (error) {
+    console.error('Error during Supabase initialization:', error);
+  }
+} else {
+  console.log('Skipping Supabase initialization due to missing client.');
 }
 
 const rootElement = document.getElementById('root');
