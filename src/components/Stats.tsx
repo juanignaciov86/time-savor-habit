@@ -52,7 +52,7 @@ const Stats: React.FC = () => {
               <BarChart data={weeklyStats} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <XAxis 
                   dataKey="date"
-                  tickFormatter={(tick) => {
+                  tickFormatter={(tick: any) => {
                     const date = new Date(tick);
                     return date.toLocaleDateString('en-US', { weekday: 'short' });
                   }}
@@ -69,9 +69,9 @@ const Stats: React.FC = () => {
               <BarChart data={monthlyStats} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <XAxis 
                   dataKey="date"
-                  tickFormatter={(tick) => {
+                  tickFormatter={(tick: any) => {
                     const date = new Date(tick);
-                    return date.getDate();
+                    return date.getDate().toString();
                   }}
                   tick={{ fontSize: 12 }}
                 />
