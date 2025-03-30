@@ -3,28 +3,22 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { initializeSupabaseSync } from './utils/habitUtils';
 import { supabaseClient } from './utils/supabaseClient';
 
-// Check if Supabase client initialized correctly
-if (!supabaseClient) {
-  console.log('No Supabase client available. The app will use localStorage for data storage.');
+// Log and check Supabase client initialization status
+if (supabaseClient === null) {
+  console.log('Supabase client could not be initialized. The app will use localStorage for data storage.');
 } else {
   console.log('Supabase client initialized successfully.');
-}
-
-// Initialize Supabase connection and sync data only if client exists
-// Using a try-catch to prevent app from crashing if Supabase initialization fails
-if (supabaseClient) {
-  try {
+  
+  // Import and initialize sync function only if client exists
+  import('./utils/habitUtils').then(({ initializeSupabaseSync }) => {
     initializeSupabaseSync().catch(error => {
-      console.error('Failed to initialize Supabase:', error);
+      console.error('Failed to initialize Supabase sync:', error);
     });
-  } catch (error) {
-    console.error('Error during Supabase initialization:', error);
-  }
-} else {
-  console.log('Skipping Supabase initialization due to missing client.');
+  }).catch(error => {
+    console.error('Error importing habitUtils:', error);
+  });
 }
 
 const rootElement = document.getElementById('root');

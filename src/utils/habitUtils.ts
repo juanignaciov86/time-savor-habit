@@ -36,8 +36,8 @@ export const getHabits = async (): Promise<Habit[]> => {
       return data ? JSON.parse(data) : [];
     }
 
-    const user = await supabaseClient.auth.getUser();
-    const userId = user.data.user?.id;
+    const { data: user } = await supabaseClient.auth.getUser();
+    const userId = user?.id;
     
     if (!userId) {
       // Fallback to localStorage if not authenticated
@@ -57,8 +57,15 @@ export const getHabits = async (): Promise<Habit[]> => {
       return localData ? JSON.parse(localData) : [];
     }
 
-    // Cast data to Habit[] to fix TypeScript errors
-    const habitsData = data as Habit[];
+    // Proper type casting with type safety
+    const habitsData = data ? data.map(item => ({
+      id: String(item.id),
+      name: String(item.name),
+      description: String(item.description || ''),
+      color: String(item.color),
+      createdAt: Number(item.createdAt),
+      userId: String(item.userId)
+    })) : [];
     
     // Also store in localStorage as backup
     localStorage.setItem(STORAGE_KEY, JSON.stringify(habitsData));
@@ -86,14 +93,24 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
       .eq('id', id)
       .single();
     
-    if (error) {
+    if (error || !data) {
       console.error('Error fetching habit:', error);
       // Fallback to localStorage
       const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       return habits.find((h: Habit) => h.id === id);
     }
     
-    return data as Habit;
+    // Proper type casting
+    const habit: Habit = {
+      id: String(data.id),
+      name: String(data.name),
+      description: String(data.description || ''),
+      color: String(data.color),
+      createdAt: Number(data.createdAt),
+      userId: String(data.userId)
+    };
+    
+    return habit;
   } catch (error) {
     console.error('Failed to get habit by ID:', error);
     // Fallback to localStorage
@@ -113,25 +130,46 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
     };
     
     if (isUsingRealSupabase() && supabaseClient) {
-      const user = supabaseClient.auth.getUser();
-      const userId = (await user).data.user?.id;
+      const { data: userData } = await supabaseClient.auth.getUser();
+      const userId = userData?.user?.id;
       
       if (userId) {
         newHabit.userId = userId;
         
+        // Explicitly convert Habit to Record<string, unknown>
+        const habitRecord: Record<string, unknown> = {
+          id: newHabit.id,
+          name: newHabit.name,
+          description: newHabit.description,
+          color: newHabit.color,
+          createdAt: newHabit.createdAt,
+          userId: newHabit.userId
+        };
+        
         const { data, error } = await supabaseClient
           .from('habits')
-          .insert([newHabit])
+          .insert([habitRecord])
           .select();
         
         if (error) {
           console.error('Error adding habit:', error);
-        } else if (data) {
+        } else if (data && data.length > 0) {
           // Store in localStorage as backup
           const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-          habits.push(data[0] as Habit);
+          
+          // Proper type casting
+          const insertedHabit: Habit = {
+            id: String(data[0].id),
+            name: String(data[0].name),
+            description: String(data[0].description || ''),
+            color: String(data[0].color),
+            createdAt: Number(data[0].createdAt),
+            userId: String(data[0].userId)
+          };
+          
+          habits.push(insertedHabit);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-          return data[0] as Habit;
+          return insertedHabit;
         }
       }
     }
@@ -182,12 +220,12 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
     
     const { data, error } = await supabaseClient
       .from('habits')
-      .update(updates)
+      .update(updates as Record<string, unknown>)
       .eq('id', id)
       .select()
       .single();
     
-    if (error) {
+    if (error || !data) {
       console.error('Error updating habit:', error);
       // Fallback to localStorage
       const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -204,7 +242,17 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
       return habits[habitIndex];
     }
     
-    return data as Habit;
+    // Proper type casting
+    const updatedHabit: Habit = {
+      id: String(data.id),
+      name: String(data.name),
+      description: String(data.description || ''),
+      color: String(data.color),
+      createdAt: Number(data.createdAt),
+      userId: String(data.userId)
+    };
+    
+    return updatedHabit;
   } catch (error) {
     console.error('Failed to update habit:', error);
     
@@ -300,8 +348,8 @@ export const importHabits = async (jsonData: string): Promise<boolean> => {
       return true;
     }
 
-    const user = supabaseClient.auth.getUser();
-    const userId = (await user).data.user?.id;
+    const { data: userData } = await supabaseClient.auth.getUser();
+    const userId = userData?.user?.id;
     
     if (!userId) {
       // Fallback to localStorage
@@ -315,10 +363,20 @@ export const importHabits = async (jsonData: string): Promise<boolean> => {
       userId
     }));
     
+    // Convert habits to Record<string, unknown>[] for proper typing
+    const habitsRecords: Record<string, unknown>[] = habitsWithUserId.map(habit => ({
+      id: habit.id,
+      name: habit.name,
+      description: habit.description,
+      color: habit.color,
+      createdAt: habit.createdAt,
+      userId: habit.userId
+    }));
+    
     // Insert into Supabase (upsert to handle existing records)
     const { error } = await supabaseClient
       .from('habits')
-      .upsert(habitsWithUserId, { onConflict: 'id' });
+      .upsert(habitsRecords, { onConflict: 'id' });
     
     if (error) {
       console.error('Error importing habits to Supabase:', error);
@@ -343,7 +401,8 @@ export const initializeSupabaseSync = async () => {
     }
     
     // Check if the user is authenticated
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data } = await supabaseClient.auth.getUser();
+    const user = data?.user;
     
     if (user) {
       console.log('User is authenticated, syncing data');
@@ -360,10 +419,20 @@ export const initializeSupabaseSync = async () => {
             userId: user.id
           }));
           
+          // Convert habits to Record<string, unknown>[] for proper typing
+          const habitsRecords: Record<string, unknown>[] = habitsWithUserId.map(habit => ({
+            id: habit.id,
+            name: habit.name,
+            description: habit.description,
+            color: habit.color,
+            createdAt: habit.createdAt,
+            userId: habit.userId
+          }));
+          
           // Insert into Supabase
           const { error } = await supabaseClient
             .from('habits')
-            .upsert(habitsWithUserId, { onConflict: 'id' });
+            .upsert(habitsRecords, { onConflict: 'id' });
             
           if (!error) {
             console.log('Local habits migrated to Supabase');
