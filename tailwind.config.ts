@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -18,12 +19,21 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				sans: ['-apple-system', 'BlinkMacSystemFont', 'San Francisco', 'Helvetica Neue', 'sans-serif']
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				ios: {
+					blue: '#007AFF',
+					gray: '#8E8E93',
+					lightgray: '#E5E5EA',
+					background: '#F2F2F7'
+				},
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))'
@@ -84,11 +94,20 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'pulse-ios': {
+					'0%, 100%': {
+						opacity: '1'
+					},
+					'50%': {
+						opacity: '0.5'
+					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'pulse-ios': 'pulse-ios 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
 			}
 		}
 	},
