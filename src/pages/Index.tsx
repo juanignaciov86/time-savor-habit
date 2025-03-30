@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 const Index: React.FC = () => {
   const { toast } = useToast();
 
-  const handleSessionComplete = (duration: number) => {
+  const handleSessionComplete = (duration: number, habitId: string) => {
     // Create and save the session
     const endTime = Date.now();
     const startTime = endTime - (duration * 1000);
@@ -18,6 +18,7 @@ const Index: React.FC = () => {
       startTime,
       endTime,
       duration,
+      habitId,
     };
     
     saveSession(session);

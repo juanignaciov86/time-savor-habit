@@ -1,87 +1,112 @@
 
+// Storage utilities for habit sessions
+
+import { getHabitById } from './habitUtils';
+
 export interface HabitSession {
   id: string;
   startTime: number;
   endTime: number;
-  duration: number; // in seconds
+  duration: number;
+  habitId: string;
 }
 
-const STORAGE_KEY = 'habit-timer-sessions';
+const SESSIONS_STORAGE_KEY = 'time-savor-sessions';
 
-// Save a session to localStorage
-export const saveSession = (session: HabitSession): void => {
-  const sessions = getSessions();
-  sessions.push(session);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-};
-
-// Get all sessions from localStorage
+// Get all sessions
 export const getSessions = (): HabitSession[] => {
-  const data = localStorage.getItem(STORAGE_KEY);
+  const data = localStorage.getItem(SESSIONS_STORAGE_KEY);
   return data ? JSON.parse(data) : [];
 };
 
-// Clear all sessions (for testing)
-export const clearSessions = (): void => {
-  localStorage.removeItem(STORAGE_KEY);
+// Get sessions for a specific habit
+export const getSessionsByHabit = (habitId: string): HabitSession[] => {
+  const sessions = getSessions();
+  return sessions.filter(session => session.habitId === habitId);
 };
 
-// Get daily stats
-export const getDailyTotal = (date: Date = new Date()): number => {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
+// Save a new session
+export const saveSession = (session: HabitSession): void => {
+  const sessions = getSessions();
+  sessions.push(session);
+  localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+};
+
+// Get daily total time for all habits or a specific habit
+export const getDailyTotal = (habitId?: string): number => {
+  const sessions = habitId ? getSessionsByHabit(habitId) : getSessions();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-  
-  return getSessions()
-    .filter(session => session.startTime >= startOfDay.getTime() && session.startTime <= endOfDay.getTime())
+  return sessions
+    .filter(session => {
+      const sessionDate = new Date(session.endTime);
+      sessionDate.setHours(0, 0, 0, 0);
+      return sessionDate.getTime() === today.getTime();
+    })
     .reduce((total, session) => total + session.duration, 0);
 };
 
-// Get weekly stats
-export const getWeeklyStats = (): { date: number, duration: number }[] => {
-  const now = new Date();
-  const startOfWeek = new Date(now);
-  const day = startOfWeek.getDay();
-  startOfWeek.setDate(now.getDate() - (day === 0 ? 6 : day - 1)); // Adjust to start on Monday
-  startOfWeek.setHours(0, 0, 0, 0);
+// Get weekly stats for all habits or a specific habit
+export const getWeeklyStats = (habitId?: string): { date: number, duration: number }[] => {
+  const sessions = habitId ? getSessionsByHabit(habitId) : getSessions();
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const result = [];
   
-  const weekStats = [];
-  
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(startOfWeek);
-    date.setDate(startOfWeek.getDate() + i);
+  // Create stats for the past 7 days
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(today.getDate() - (dayOfWeek + i) % 7);
+    date.setHours(0, 0, 0, 0);
     
-    const dayTotal = getDailyTotal(date);
+    const dayTotal = sessions
+      .filter(session => {
+        const sessionDate = new Date(session.endTime);
+        sessionDate.setHours(0, 0, 0, 0);
+        return sessionDate.getTime() === date.getTime();
+      })
+      .reduce((total, session) => total + session.duration, 0);
     
-    weekStats.push({
+    result.push({
       date: date.getTime(),
       duration: dayTotal
     });
   }
   
-  return weekStats;
+  return result;
 };
 
-// Get monthly stats
-export const getMonthlyStats = (): { date: number, duration: number }[] => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+// Get monthly stats for all habits or a specific habit
+export const getMonthlyStats = (habitId?: string): { date: number, duration: number }[] => {
+  const sessions = habitId ? getSessionsByHabit(habitId) : getSessions();
+  const today = new Date();
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   
-  const monthStats = [];
+  const result = [];
   
-  for (let i = 1; i <= daysInMonth; i++) {
-    const date = new Date(year, month, i);
-    const dayTotal = getDailyTotal(date);
+  // Create stats for each day in the current month
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(currentYear, currentMonth, day);
     
-    monthStats.push({
+    const dayTotal = sessions
+      .filter(session => {
+        const sessionDate = new Date(session.endTime);
+        return (
+          sessionDate.getDate() === day &&
+          sessionDate.getMonth() === currentMonth &&
+          sessionDate.getFullYear() === currentYear
+        );
+      })
+      .reduce((total, session) => total + session.duration, 0);
+    
+    result.push({
       date: date.getTime(),
       duration: dayTotal
     });
   }
   
-  return monthStats;
+  return result;
 };

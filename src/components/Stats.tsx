@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   getWeeklyStats, 
   getMonthlyStats, 
@@ -8,18 +9,31 @@ import {
 } from '../utils/storageUtils';
 import { formatDuration, formatDate } from '../utils/timeUtils';
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import { getHabits, Habit } from '../utils/habitUtils';
 
 const Stats: React.FC = () => {
   const [dailyTotal, setDailyTotal] = useState(0);
   const [weeklyStats, setWeeklyStats] = useState<{ date: number, duration: number }[]>([]);
   const [monthlyStats, setMonthlyStats] = useState<{ date: number, duration: number }[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [selectedHabit, setSelectedHabit] = useState<string | null>(null);
   
   useEffect(() => {
-    // Fetch stats
-    setDailyTotal(getDailyTotal());
-    setWeeklyStats(getWeeklyStats());
-    setMonthlyStats(getMonthlyStats());
+    // Fetch available habits
+    const availableHabits = getHabits();
+    setHabits(availableHabits);
+    
+    // Load stats for all habits initially
+    updateStats(null);
   }, []);
+
+  // Update stats when selected habit changes
+  const updateStats = (habitId: string | null) => {
+    setSelectedHabit(habitId);
+    setDailyTotal(getDailyTotal(habitId || undefined));
+    setWeeklyStats(getWeeklyStats(habitId || undefined));
+    setMonthlyStats(getMonthlyStats(habitId || undefined));
+  };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -35,6 +49,31 @@ const Stats: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <div className="ios-card p-4">
+        <Select
+          value={selectedHabit || ""}
+          onValueChange={(value) => updateStats(value || null)}
+        >
+          <SelectTrigger className="w-full mb-3">
+            <SelectValue placeholder="All Habits" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All Habits</SelectItem>
+            {habits.map((habit) => (
+              <SelectItem key={habit.id} value={habit.id}>
+                <div className="flex items-center">
+                  <span 
+                    className="h-3 w-3 rounded-full mr-2" 
+                    style={{ backgroundColor: habit.color }}
+                  ></span>
+                  {habit.name}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="ios-card p-6">
         <h2 className="text-xl font-semibold mb-4">Today's Focus Time</h2>
         <p className="text-4xl font-light text-center">{formatDuration(dailyTotal)}</p>
