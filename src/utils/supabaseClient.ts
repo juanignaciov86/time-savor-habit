@@ -1,10 +1,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize the Supabase client
-// Use environment variables when available, otherwise use default values that will work
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://xyzcompany.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+// Default placeholder values for development/demo
+const DEFAULT_SUPABASE_URL = 'https://xyzcompany.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+
+// Get values from environment variables or use defaults
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
 
 // Log a warning if we're using the default values in production
 if (
@@ -28,6 +31,6 @@ export const isUsingRealSupabase = (): boolean => {
   return (
     import.meta.env.VITE_SUPABASE_URL !== undefined && 
     import.meta.env.VITE_SUPABASE_URL !== '' &&
-    import.meta.env.VITE_SUPABASE_URL !== 'https://xyzcompany.supabase.co'
+    import.meta.env.VITE_SUPABASE_URL !== DEFAULT_SUPABASE_URL
   );
 };
