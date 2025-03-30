@@ -6,8 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash, Edit, Check, X } from 'lucide-react';
-import { Habit, getHabits, addHabit, updateHabit, deleteHabit } from '../utils/habitUtils';
+import { Plus, Trash, Edit, Check, X, Share, Download } from 'lucide-react';
+import { 
+  Habit, 
+  getHabits, 
+  addHabit, 
+  updateHabit, 
+  deleteHabit,
+  exportHabits,
+  importHabits
+} from '../utils/habitUtils';
 
 const HabitsPage: React.FC = () => {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -18,6 +26,8 @@ const HabitsPage: React.FC = () => {
     description: '',
     color: '#007AFF'
   });
+  const [importValue, setImportValue] = useState('');
+  const [showImport, setShowImport] = useState(false);
   const { toast } = useToast();
 
   // Load habits
@@ -90,12 +100,134 @@ const HabitsPage: React.FC = () => {
     }
   };
 
+  // Handle export
+  const handleExport = () => {
+    const data = exportHabits();
+    
+    // Create shareable content
+    if (navigator.share) {
+      navigator.share({
+        title: 'Time Savor Habits',
+        text: data
+      }).catch(error => {
+        console.log('Error sharing', error);
+        copyToClipboard(data);
+      });
+    } else {
+      copyToClipboard(data);
+    }
+  };
+  
+  // Copy to clipboard helper
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast({
+        title: "Data copied",
+        description: "Habit data has been copied to clipboard"
+      });
+    }, 
+    err => {
+      console.error('Could not copy text: ', err);
+    });
+  };
+
+  // Handle import
+  const handleImport = () => {
+    if (!importValue.trim()) {
+      toast({
+        title: "Import failed",
+        description: "Please paste the habit data first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const success = importHabits(importValue);
+    
+    if (success) {
+      // Reload habits
+      setHabits(getHabits());
+      setShowImport(false);
+      setImportValue('');
+      toast({
+        title: "Import successful",
+        description: "Your habits have been imported"
+      });
+    } else {
+      toast({
+        title: "Import failed",
+        description: "Invalid data format",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <Layout>
       <header className="mb-6">
         <h1 className="text-3xl font-bold">Habits</h1>
         <p className="text-ios-gray">Manage your habits</p>
       </header>
+      
+      {/* Import/Export Buttons */}
+      <div className="flex justify-between mb-6">
+        <div className="space-x-2">
+          <Button 
+            onClick={() => setShowForm(true)}
+            className="flex items-center"
+            variant={showForm ? "secondary" : "default"}
+          >
+            <Plus className="mr-1 h-4 w-4" /> Add Habit
+          </Button>
+        </div>
+        <div className="space-x-2">
+          <Button
+            onClick={() => setShowImport(prev => !prev)}
+            variant="outline"
+            className="flex items-center"
+          >
+            <Download className="mr-1 h-4 w-4" /> Import
+          </Button>
+          <Button
+            onClick={handleExport}
+            variant="outline"
+            className="flex items-center"
+          >
+            <Share className="mr-1 h-4 w-4" /> Export
+          </Button>
+        </div>
+      </div>
+
+      {/* Import Form */}
+      {showImport && (
+        <div className="ios-card mb-6 p-4">
+          <form onSubmit={(e) => { e.preventDefault(); handleImport(); }} className="space-y-4">
+            <div>
+              <Label htmlFor="importData">Paste Habit Data</Label>
+              <Textarea
+                id="importData"
+                value={importValue}
+                onChange={(e) => setImportValue(e.target.value)}
+                placeholder="Paste the exported habit data here"
+                rows={4}
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setShowImport(false); setImportValue(''); }}
+                className="flex items-center"
+              >
+                <X className="mr-1 h-4 w-4" /> Cancel
+              </Button>
+              <Button type="submit" className="flex items-center">
+                <Check className="mr-1 h-4 w-4" /> Import
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Add/Edit Form */}
       {showForm ? (
@@ -159,14 +291,7 @@ const HabitsPage: React.FC = () => {
             </div>
           </form>
         </div>
-      ) : (
-        <Button
-          onClick={() => setShowForm(true)}
-          className="mb-6 flex items-center"
-        >
-          <Plus className="mr-1 h-4 w-4" /> Add New Habit
-        </Button>
-      )}
+      ) : null}
 
       {/* Habits List */}
       <div className="space-y-4">

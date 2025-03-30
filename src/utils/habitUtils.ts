@@ -66,3 +66,35 @@ export const deleteHabit = (id: string): boolean => {
   
   return true;
 };
+
+// Export habits data
+export const exportHabits = (): string => {
+  const habits = getHabits();
+  return JSON.stringify(habits);
+};
+
+// Import habits data
+export const importHabits = (jsonData: string): boolean => {
+  try {
+    const habits = JSON.parse(jsonData) as Habit[];
+    
+    // Validate imported data
+    const isValidData = Array.isArray(habits) && 
+      habits.every(habit => 
+        typeof habit.id === 'string' && 
+        typeof habit.name === 'string' &&
+        typeof habit.color === 'string' &&
+        typeof habit.createdAt === 'number'
+      );
+    
+    if (!isValidData) {
+      return false;
+    }
+    
+    localStorage.setItem(STORAGE_KEY, jsonData);
+    return true;
+  } catch (error) {
+    console.error('Failed to import habits:', error);
+    return false;
+  }
+};
