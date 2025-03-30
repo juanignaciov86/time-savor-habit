@@ -4,7 +4,7 @@ import { Play, Pause } from 'lucide-react';
 import { formatTime } from '../utils/timeUtils';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getHabits, Habit } from '../utils/habitUtils';
+import { getHabits, getHabitsSync, Habit } from '../utils/habitUtils';
 
 interface TimerProps {
   onSessionComplete: (duration: number, habitId: string) => void;
@@ -19,13 +19,25 @@ const Timer: React.FC<TimerProps> = ({ onSessionComplete }) => {
 
   // Load habits on component mount
   useEffect(() => {
-    const loadedHabits = getHabits();
-    setHabits(loadedHabits);
+    // Initial load with sync function to avoid delays
+    const initialHabits = getHabitsSync();
+    setHabits(initialHabits);
     
     // Select first habit by default if available
-    if (loadedHabits.length > 0 && !selectedHabit) {
-      setSelectedHabit(loadedHabits[0].id);
+    if (initialHabits.length > 0 && !selectedHabit) {
+      setSelectedHabit(initialHabits[0].id);
     }
+    
+    // Then load from database asynchronously
+    getHabits().then(dbHabits => {
+      setHabits(dbHabits);
+      // If we didn't have any habits initially but got some from the db, select the first one
+      if (dbHabits.length > 0 && !selectedHabit) {
+        setSelectedHabit(dbHabits[0].id);
+      }
+    }).catch(error => {
+      console.error("Error loading habits:", error);
+    });
   }, []);
 
   // Effect for the timer

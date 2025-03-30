@@ -3,6 +3,12 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { initializeSupabaseSync } from './utils/habitUtils';
+
+// Initialize Supabase connection and sync data
+initializeSupabaseSync().catch(error => {
+  console.error('Failed to initialize Supabase:', error);
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');

@@ -9,7 +9,7 @@ import {
 } from '../utils/storageUtils';
 import { formatDuration, formatDate } from '../utils/timeUtils';
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip } from 'recharts';
-import { getHabits, Habit } from '../utils/habitUtils';
+import { getHabits, getHabitsSync, Habit } from '../utils/habitUtils';
 
 const Stats: React.FC = () => {
   const [dailyTotal, setDailyTotal] = useState(0);
@@ -19,9 +19,16 @@ const Stats: React.FC = () => {
   const [selectedHabit, setSelectedHabit] = useState<string | null>(null);
   
   useEffect(() => {
-    // Fetch available habits
-    const availableHabits = getHabits();
-    setHabits(availableHabits);
+    // Fetch available habits synchronously first
+    const initialHabits = getHabitsSync();
+    setHabits(initialHabits);
+    
+    // Then get from database asynchronously
+    getHabits().then(dbHabits => {
+      setHabits(dbHabits);
+    }).catch(error => {
+      console.error("Error loading habits:", error);
+    });
     
     // Load stats for all habits initially
     updateStats(null);
