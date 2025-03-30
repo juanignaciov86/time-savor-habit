@@ -1,3 +1,4 @@
+
 // Habit management utilities
 import { supabaseClient } from './supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,11 +14,23 @@ export interface Habit {
 
 const STORAGE_KEY = 'time-savor-habits'; // Kept for fallback
 
-// Get all habits
+// Get all habits - sync wrapper for components that can't handle async
+export const getHabitsSync = (): Habit[] => {
+  try {
+    // Return from localStorage as fallback
+    const data = localStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Failed to get habits from localStorage:', error);
+    return [];
+  }
+};
+
+// Get all habits - async version for database operations
 export const getHabits = async (): Promise<Habit[]> => {
   try {
-    const user = supabaseClient.auth.getUser();
-    const userId = (await user).data.user?.id;
+    const user = await supabaseClient.auth.getUser();
+    const userId = user.data.user?.id;
     
     if (!userId) {
       // Fallback to localStorage if not authenticated
@@ -37,6 +50,8 @@ export const getHabits = async (): Promise<Habit[]> => {
       return localData ? JSON.parse(localData) : [];
     }
 
+    // Also store in localStorage as backup
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data || []));
     return data || [];
   } catch (error) {
     console.error('Failed to get habits:', error);
