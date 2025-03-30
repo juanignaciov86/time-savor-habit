@@ -1,4 +1,5 @@
 
+import React from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,6 +13,7 @@ import HabitsPage from "./pages/HabitsPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
+// Create a client
 const queryClient = new QueryClient();
 
 // Protected route component
@@ -22,44 +24,48 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          
-          <Route path="/" element={
-            <ProtectedRoute>
-              <Index />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/stats" element={
-            <ProtectedRoute>
-              <StatsPage />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/history" element={
-            <ProtectedRoute>
-              <HistoryPage />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/habits" element={
-            <ProtectedRoute>
-              <HabitsPage />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  return (
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <Index />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/stats" element={
+                <ProtectedRoute>
+                  <StatsPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/history" element={
+                <ProtectedRoute>
+                  <HistoryPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/habits" element={
+                <ProtectedRoute>
+                  <HabitsPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
+};
 
 export default App;
