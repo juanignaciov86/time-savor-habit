@@ -51,14 +51,14 @@ const Stats: React.FC = () => {
     <div className="space-y-6">
       <div className="ios-card p-4">
         <Select
-          value={selectedHabit || ""}
-          onValueChange={(value) => updateStats(value || null)}
+          value={selectedHabit || "all-habits"}
+          onValueChange={(value) => updateStats(value === "all-habits" ? null : value)}
         >
           <SelectTrigger className="w-full mb-3">
             <SelectValue placeholder="All Habits" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Habits</SelectItem>
+            <SelectItem value="all-habits">All Habits</SelectItem>
             {habits.map((habit) => (
               <SelectItem key={habit.id} value={habit.id}>
                 <div className="flex items-center">
