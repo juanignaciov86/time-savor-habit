@@ -1,10 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
-import { Play, Pause } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, Plus } from 'lucide-react';
 import { formatTime } from '../utils/timeUtils';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getHabits, getHabitsSync, Habit } from '../utils/habitUtils';
+import { TimeEntryDialog } from './TimeEntryDialog';
 
 interface TimerProps {
   onSessionComplete: (duration: number, habitId: string) => void;
@@ -12,10 +13,11 @@ interface TimerProps {
 
 const Timer: React.FC<TimerProps> = ({ onSessionComplete }) => {
   const [isRunning, setIsRunning] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [startTime, setStartTime] = useState<number | null>(null);
   const [selectedHabit, setSelectedHabit] = useState<string | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
+  const startTimeRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Load habits on component mount
   useEffect(() => {
@@ -40,44 +42,64 @@ const Timer: React.FC<TimerProps> = ({ onSessionComplete }) => {
     });
   }, []);
 
-  // Effect for the timer
+  // Effect for the timer using performance.now()
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let animationFrameId: number;
+
+    const updateTimer = () => {
+      if (!isRunning || !startTimeRef.current) return;
+
+      const now = performance.now();
+      if (!lastTickRef.current) lastTickRef.current = now;
+
+      // Update every second
+      if (now - lastTickRef.current >= 1000) {
+        const elapsed = Math.floor((now - startTimeRef.current) / 1000);
+        setElapsedSeconds(elapsed);
+        lastTickRef.current = now;
+      }
+
+      animationFrameId = requestAnimationFrame(updateTimer);
+    };
 
     if (isRunning) {
-      interval = setInterval(() => {
-        setSeconds(prev => prev + 1);
-      }, 1000);
-    } else if (interval) {
-      clearInterval(interval);
+      if (!startTimeRef.current) {
+        startTimeRef.current = performance.now();
+      }
+      updateTimer();
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
   }, [isRunning]);
 
   const toggleTimer = () => {
-    if (!selectedHabit) {
-      // Cannot start timer without selecting a habit
-      return;
-    }
-    
+    if (!selectedHabit) return;
+
     if (!isRunning) {
       // Starting the timer
-      setStartTime(Date.now());
+      startTimeRef.current = performance.now();
+      lastTickRef.current = null;
       setIsRunning(true);
     } else {
       // Stopping the timer
       setIsRunning(false);
-      const sessionDuration = seconds;
-      
-      // Only record if we've tracked some time and a habit is selected
-      if (sessionDuration > 0 && selectedHabit) {
-        onSessionComplete(sessionDuration, selectedHabit);
-        setSeconds(0); // Reset timer after recording
+      if (elapsedSeconds > 0 && selectedHabit) {
+        const endTime = Date.now();
+        const startTime = endTime - (elapsedSeconds * 1000);
+        onSessionComplete(elapsedSeconds, selectedHabit);
+        setElapsedSeconds(0);
+        startTimeRef.current = null;
+        lastTickRef.current = null;
       }
     }
+  };
+
+  const handleManualEntry = (session: { startTime: number; endTime: number; duration: number; habitId: string }) => {
+    onSessionComplete(session.duration, session.habitId);
   };
 
   return (
@@ -86,19 +108,21 @@ const Timer: React.FC<TimerProps> = ({ onSessionComplete }) => {
         <h2 className="text-2xl font-semibold mb-4">Focus Time</h2>
         
         <div className="w-full mb-6">
-          <Select
-            disabled={isRunning}
-            value={selectedHabit || ""}
-            onValueChange={(value) => setSelectedHabit(value)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a habit to track" />
-            </SelectTrigger>
-            <SelectContent>
-              {habits.map((habit) => (
-                <SelectItem key={habit.id} value={habit.id}>
-                  <div className="flex items-center">
-                    <span 
+          <div className="flex gap-2 mb-4">
+            <div className="flex-1">
+              <Select
+                disabled={isRunning}
+                value={selectedHabit || ""}
+                onValueChange={(value) => setSelectedHabit(value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a habit to track" />
+                </SelectTrigger>
+                <SelectContent>
+                  {habits.map((habit) => (
+                    <SelectItem key={habit.id} value={habit.id}>
+                      <div className="flex items-center">
+                        <span 
                       className="h-3 w-3 rounded-full mr-2" 
                       style={{ backgroundColor: habit.color }}
                     ></span>
@@ -108,9 +132,19 @@ const Timer: React.FC<TimerProps> = ({ onSessionComplete }) => {
               ))}
             </SelectContent>
           </Select>
+          </div>
+        </div>
         </div>
         
-        <div className="text-6xl font-extralight my-8">{formatTime(seconds)}</div>
+        <div className="text-6xl font-extralight my-8">{formatTime(elapsedSeconds)}</div>
+
+        <div className="flex gap-2 mb-4 w-full justify-center">
+          <TimeEntryDialog
+            habits={habits}
+            onSave={handleManualEntry}
+            trigger={<Button variant="outline" size="icon"><Plus className="h-4 w-4" /></Button>}
+          />
+        </div>
         
         <Button 
           onClick={toggleTimer}

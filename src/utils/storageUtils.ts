@@ -32,6 +32,33 @@ export const saveSession = (session: HabitSession): void => {
   localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
 };
 
+// Update an existing session
+export const updateSession = (sessionId: string, updates: Partial<Omit<HabitSession, 'id'>>): HabitSession | null => {
+  const sessions = getSessions();
+  const index = sessions.findIndex(s => s.id === sessionId);
+  
+  if (index === -1) return null;
+  
+  const updatedSession = { ...sessions[index], ...updates };
+  sessions[index] = updatedSession;
+  localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+  
+  return updatedSession;
+};
+
+// Delete a session
+export const deleteSession = (sessionId: string): boolean => {
+  const sessions = getSessions();
+  const index = sessions.findIndex(s => s.id === sessionId);
+  
+  if (index === -1) return false;
+  
+  sessions.splice(index, 1);
+  localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+  
+  return true;
+};
+
 // Get daily total time for all habits or a specific habit
 export const getDailyTotal = (habitId?: string): number => {
   const sessions = habitId ? getSessionsByHabit(habitId) : getSessions();
