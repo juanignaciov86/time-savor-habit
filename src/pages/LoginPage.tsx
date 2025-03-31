@@ -16,13 +16,12 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    setTimeout(() => {
-      const success = login(email, password);
-      setIsLoading(false);
+    try {
+      const success = await login(email, password);
 
       if (success) {
         toast({
@@ -37,7 +36,15 @@ const LoginPage: React.FC = () => {
           variant: "destructive",
         });
       }
-    }, 1000); // Simulate API request
+    } catch (error) {
+      toast({
+        title: "Login error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

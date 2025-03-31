@@ -28,6 +28,10 @@ export const getHabitsSync = (): Habit[] => {
 // Get all habits - async version for database operations
 export const getHabits = async (): Promise<Habit[]> => {
   try {
+    // Debug logs
+    console.log('isUsingRealSupabase:', isUsingRealSupabase());
+    console.log('supabaseClient exists:', !!supabaseClient);
+    
     // Check if we're using a real Supabase instance
     if (!isUsingRealSupabase() || !supabaseClient) {
       console.log('Using localStorage fallback for habits (no Supabase URL configured)');

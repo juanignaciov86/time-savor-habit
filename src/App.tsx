@@ -18,9 +18,24 @@ const queryClient = new QueryClient();
 
 // Protected route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  if (!isAuthenticated()) {
+  const [isAuthed, setIsAuthed] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    const checkAuth = async () => {
+      const authed = await isAuthenticated();
+      setIsAuthed(authed);
+    };
+    checkAuth();
+  }, []);
+
+  if (isAuthed === null) {
+    return <div>Loading...</div>; // Or a proper loading spinner
+  }
+
+  if (!isAuthed) {
     return <Navigate to="/login" replace />;
   }
+
   return <>{children}</>;
 };
 

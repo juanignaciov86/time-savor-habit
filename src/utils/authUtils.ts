@@ -1,32 +1,40 @@
 
-// Simple authentication utils for the app
-
-interface User {
-  email: string;
-  password: string;
-}
-
-// Hardcoded user for now
-const VALID_USER: User = {
-  email: "juanignaciov86@gmail.com",
-  password: "123"
-};
+import { supabaseClient } from './supabaseClient';
 
 // Check if user is logged in
-export const isAuthenticated = (): boolean => {
-  return localStorage.getItem('isLoggedIn') === 'true';
+export const isAuthenticated = async (): Promise<boolean> => {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  return !!user;
 };
 
 // Login function
-export const login = (email: string, password: string): boolean => {
-  if (email === VALID_USER.email && password === VALID_USER.password) {
-    localStorage.setItem('isLoggedIn', 'true');
-    return true;
+export const login = async (email: string, password: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error('Login error:', error.message);
+      return false;
+    }
+
+    return !!data.user;
+  } catch (error) {
+    console.error('Login error:', error);
+    return false;
   }
-  return false;
 };
 
 // Logout function
-export const logout = (): void => {
-  localStorage.removeItem('isLoggedIn');
+export const logout = async (): Promise<void> => {
+  try {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) {
+      console.error('Logout error:', error.message);
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
+  }
 };

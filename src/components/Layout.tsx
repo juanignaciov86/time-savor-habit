@@ -15,13 +15,21 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return location.pathname === path;
   };
   
-  const handleLogout = () => {
-    logout();
-    toast({
-      title: "Logged out",
-      description: "You have been logged out successfully"
-    });
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast({
+        title: "Logged out",
+        description: "You have been logged out successfully"
+      });
+      navigate('/login');
+    } catch (error) {
+      toast({
+        title: "Logout error",
+        description: "An error occurred while logging out",
+        variant: "destructive"
+      });
+    }
   };
   
   return (
