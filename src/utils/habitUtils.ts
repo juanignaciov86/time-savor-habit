@@ -55,9 +55,16 @@ export const getHabits = async (): Promise<Habit[]> => {
 
     if (error) throw error;
     
+    // If no data from Supabase, check cache first
     if (!data) {
-      console.log('No habits found in Supabase');
-      localStorage.removeItem(STORAGE_KEY);
+      console.log('No habits found in Supabase, checking cache');
+      const localData = localStorage.getItem(STORAGE_KEY);
+      if (localData) {
+        const cachedHabits = JSON.parse(localData);
+        console.log('Using cached habits:', cachedHabits.length);
+        return cachedHabits;
+      }
+      console.log('No cached habits found');
       return [];
     }
     
@@ -73,11 +80,9 @@ export const getHabits = async (): Promise<Habit[]> => {
     
     console.log(`Found ${habitsData.length} habits in Supabase`);
     
-    // Store in localStorage for offline access
+    // Only update localStorage if we have new data
     if (habitsData.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(habitsData));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
     }
     return habitsData;
   } catch (error) {
@@ -446,14 +451,15 @@ export const initializeSupabaseSync = async () => {
       local: localHabits.length
     });
     
-    // Always use Supabase as source of truth
-    console.log('Using Supabase as source of truth');
+    // Check if we have Supabase data
     if (supabaseHabits && supabaseHabits.length > 0) {
+      console.log('Using Supabase data as source of truth');
       localStorage.setItem(STORAGE_KEY, JSON.stringify(supabaseHabits));
-    } else {
-      // If Supabase has no data, clear localStorage
-      localStorage.removeItem(STORAGE_KEY);
+      return;
     }
+    
+    // Keep using local data if Supabase is empty
+    console.log('No Supabase data found, keeping local data');
     
     if (localHabits.length > 0) {
       console.log('Migrating local habits to Supabase');
