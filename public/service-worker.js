@@ -1,5 +1,5 @@
-// Cache name
-const CACHE_NAME = 'time-savor-v1';
+// Cache name - increment version to force cache refresh
+const CACHE_NAME = 'time-savor-v2';
 
 // Files to cache
 const urlsToCache = [
@@ -8,8 +8,29 @@ const urlsToCache = [
   '/manifest.json',
   '/favicon.ico',
   '/logo192.png',
-  '/logo512.png'
+  '/logo512.png',
+  '/assets/*'
 ];
+
+// Skip waiting on install
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    Promise.all([
+      // Take control of all clients ASAP
+      clients.claim(),
+      // Clear old caches
+      caches.keys().then(cacheNames => {
+        return Promise.all(
+          cacheNames.map(cache => {
+            if (cache !== CACHE_NAME) {
+              return caches.delete(cache);
+            }
+          })
+        );
+      })
+    ])
+  );
+});
 
 // Install service worker
 self.addEventListener('install', event => {
@@ -24,30 +45,38 @@ self.addEventListener('install', event => {
 
 // Cache and return requests
 self.addEventListener('fetch', event => {
+  // Don't cache API requests
+  if (event.request.url.includes('/rest/v1/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // For other requests, use cache-first strategy
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // Return the cached response if found
         if (response) {
           return response;
         }
-        // Otherwise fetch from network
+
         return fetch(event.request)
           .then(response => {
-            // Don't cache if not a valid response
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
-
             // Clone the response
             const responseToCache = response.clone();
 
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
+            // Cache the updated version
+            if (response.status === 200 && response.type === 'basic') {
+              caches.open(CACHE_NAME)
+                .then(cache => {
+                  cache.put(event.request, responseToCache);
+                });
+            }
 
             return response;
+          })
+          .catch(error => {
+            console.error('Fetch failed:', error);
+            throw error;
           });
       })
   );
