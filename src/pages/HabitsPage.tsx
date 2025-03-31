@@ -8,6 +8,17 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabaseClient } from '../utils/supabaseClient';
 import { Plus, Trash, Edit, Check, X, Loader2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { 
   Habit, 
   getHabits, 
@@ -135,35 +146,36 @@ const HabitsPage: React.FC = () => {
 
   // Handle delete
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this habit?')) {
-      setIsLoading(true);
-      try {
-        const success = await deleteHabit(id);
-        if (success) {
-          setHabits(habits.filter(h => h.id !== id));
-          toast({
-            title: "Habit deleted",
-            description: "The habit has been removed."
-          });
-        }
-      } catch (error) {
-        console.error("Error deleting habit:", error);
+    setIsLoading(true);
+    try {
+      const success = await deleteHabit(id);
+      if (success) {
+        setHabits(habits.filter(h => h.id !== id));
         toast({
-          title: "Error",
-          description: "Failed to delete habit. Please try again.",
-          variant: "destructive"
+          title: "Habit deleted",
+          description: "The habit has been removed."
         });
-      } finally {
-        setIsLoading(false);
       }
+    } catch (error) {
+      console.error("Error deleting habit:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete habit. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <Layout>
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold">Habits</h1>
-        <p className="text-ios-gray">Manage your habits</p>
+      <header className="mb-6 flex items-center gap-4">
+        <img src="/logo.svg" alt="Time Savor Logo" className="w-12 h-12" />
+        <div>
+          <h1 className="text-3xl font-bold">Habits</h1>
+          <p className="text-ios-gray">Manage your habits</p>
+        </div>
       </header>
       
       {/* Add Button */}
@@ -287,14 +299,34 @@ const HabitsPage: React.FC = () => {
                   >
                     <Edit className="h-4 w-4 text-ios-gray" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(habit.id)}
-                    disabled={isLoading}
-                  >
-                    <Trash className="h-4 w-4 text-ios-gray" />
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={isLoading}
+                      >
+                        <Trash className="h-4 w-4 text-ios-gray" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Habit</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete "{habit.name}"? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                          onClick={() => handleDelete(habit.id)}
+                          className="bg-red-500 hover:bg-red-600"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             ))
