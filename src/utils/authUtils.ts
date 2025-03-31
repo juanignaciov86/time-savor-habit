@@ -3,8 +3,23 @@ import { supabaseClient } from './supabaseClient';
 
 // Check if user is logged in
 export const isAuthenticated = async (): Promise<boolean> => {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  return !!user;
+  try {
+    if (!supabaseClient) {
+      console.log('No Supabase client available, assuming not authenticated');
+      return false;
+    }
+
+    const { data: { user }, error } = await supabaseClient.auth.getUser();
+    if (error) {
+      console.error('Error checking authentication:', error);
+      return false;
+    }
+
+    return !!user;
+  } catch (error) {
+    console.error('Error checking authentication:', error);
+    return false;
+  }
 };
 
 // Login function

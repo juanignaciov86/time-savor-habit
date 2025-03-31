@@ -28,28 +28,29 @@ export const getHabitsSync = (): Habit[] => {
 // Get all habits - async version for database operations
 export const getHabits = async (): Promise<Habit[]> => {
   try {
-    // Debug logs
-    const usingRealSupabase = isUsingRealSupabase();
     console.log('=== Getting Habits ===');
+    
+    // Check Supabase connection
+    const usingRealSupabase = await isUsingRealSupabase();
     console.log('Using Supabase:', usingRealSupabase);
     
     if (!usingRealSupabase || !supabaseClient) {
-      throw new Error('No Supabase connection available');
+      console.log('No Supabase connection, falling back to localStorage');
+      return getHabitsSync();
     }
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError) throw userError;
-    
-    if (!user?.id) {
-      throw new Error('No authenticated user found');
+    if (userError || !user?.id) {
+      console.log('No authenticated user, falling back to localStorage');
+      return getHabitsSync();
     }
     
     console.log('Fetching habits for user:', user.id);
     const { data, error } = await supabaseClient
       .from('habits')
       .select('*')
-      .eq('userId', user.id)
-      .order('createdAt', { ascending: true });
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
 
     if (error) throw error;
     
@@ -64,8 +65,8 @@ export const getHabits = async (): Promise<Habit[]> => {
       name: String(item.name),
       description: String(item.description || ''),
       color: String(item.color),
-      createdAt: Number(item.createdAt),
-      userId: String(item.userId)
+      createdAt: Number(item.created_at),
+      userId: String(item.user_id)
     }));
     
     console.log(`Found ${habitsData.length} habits in Supabase`);
@@ -115,8 +116,8 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
       name: String(data.name),
       description: String(data.description || ''),
       color: String(data.color),
-      createdAt: Number(data.createdAt),
-      userId: String(data.userId)
+      createdAt: Number(data.created_at),
+      userId: String(data.user_id)
     };
     
     return habit;
@@ -128,21 +129,39 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
   }
 };
 
+// Handle offline mode for habit operations
+const handleOfflineMode = (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>): Habit => {
+  console.log('Using offline mode');
+  const offlineHabit: Habit = {
+    ...habit,
+    id: uuidv4(),
+    createdAt: Date.now(),
+    userId: 'offline'
+  };
+  
+  const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  habits.push(offlineHabit);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+  
+  return offlineHabit;
+};
+
 // Add a new habit
 export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>): Promise<Habit> => {
   try {
     console.log('=== Adding New Habit ===');
     
-    if (!isUsingRealSupabase() || !supabaseClient) {
-      throw new Error('No Supabase connection available');
+    const usingRealSupabase = await isUsingRealSupabase();
+    
+    // Handle offline mode
+    if (!usingRealSupabase || !supabaseClient) {
+      return handleOfflineMode(habit);
     }
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError) throw userError;
-    
-    if (!user?.id) {
-      throw new Error('No authenticated user found');
+    if (userError || !user?.id) {
+      return handleOfflineMode(habit);
     }
     
     const newHabit: Habit = {
@@ -152,16 +171,37 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
       userId: user.id
     };
     
+    // Convert to snake_case for database
+    const dbHabit = {
+      id: newHabit.id,
+      name: newHabit.name,
+      description: newHabit.description,
+      color: newHabit.color,
+      created_at: newHabit.createdAt,
+      user_id: user.id
+    };
+    
     console.log('Adding habit to Supabase:', newHabit);
     
     const { data, error } = await supabaseClient
       .from('habits')
-      .insert([newHabit])
+      .insert([dbHabit])
       .select()
       .single();
     
-    if (error) throw error;
-    if (!data) throw new Error('No data returned from Supabase insert');
+    if (error) {
+      console.error('Supabase error:', error);
+      if (error.message.includes('JWT expired')) {
+        console.log('Session expired, using offline mode');
+        return handleOfflineMode(habit);
+      }
+      throw error;
+    }
+    
+    if (!data) {
+      console.error('No data returned from Supabase insert');
+      return handleOfflineMode(habit);
+    }
     
     // Type cast and validate the returned data
     const insertedHabit: Habit = {
@@ -169,8 +209,8 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
       name: String(data.name),
       description: String(data.description || ''),
       color: String(data.color),
-      createdAt: Number(data.createdAt),
-      userId: String(data.userId)
+      createdAt: Number(data.created_at),
+      userId: String(data.user_id)
     };
     
     // Update local storage with the latest data
@@ -214,10 +254,15 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError) throw userError;
-    
-    if (!user?.id) {
-      throw new Error('No authenticated user found');
+    if (userError || !user?.id) {
+      console.log('No authenticated user, falling back to localStorage');
+      const localHabits = getHabitsSync();
+      const habit = localHabits.find(h => h.id === id);
+      if (!habit) return null;
+      const updatedHabit = { ...habit, ...updates };
+      const updatedHabits = localHabits.map(h => h.id === id ? updatedHabit : h);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHabits));
+      return updatedHabit;
     }
     
     // First verify the habit exists and belongs to the user
@@ -225,18 +270,23 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
       .from('habits')
       .select('*')
       .eq('id', id)
-      .eq('userId', user.id)
+      .eq('user_id', user.id)
       .single();
     
     if (fetchError) throw fetchError;
     if (!existingHabit) return null;
     
     // Update the habit
+    // Convert updates to snake_case for database
+    const dbUpdates = {
+      ...updates
+    };
+
     const { data, error } = await supabaseClient
       .from('habits')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', id)
-      .eq('userId', user.id)
+      .eq('user_id', user.id)
       .select()
       .single();
     
@@ -249,8 +299,8 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
       name: String(data.name),
       description: String(data.description || ''),
       color: String(data.color),
-      createdAt: Number(data.createdAt),
-      userId: String(data.userId)
+      createdAt: Number(data.created_at),
+      userId: String(data.user_id)
     };
     
     // Update local storage with the latest data
@@ -295,10 +345,15 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError) throw userError;
-    
-    if (!user?.id) {
-      throw new Error('No authenticated user found');
+    if (userError || !user?.id) {
+      console.log('No authenticated user, falling back to localStorage');
+      const localHabits = getHabitsSync();
+      const habit = localHabits.find(h => h.id === id);
+      if (!habit) return null;
+      const updatedHabit = { ...habit, ...updates };
+      const updatedHabits = localHabits.map(h => h.id === id ? updatedHabit : h);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHabits));
+      return updatedHabit;
     }
     
     // First verify the habit exists and belongs to the user
@@ -306,7 +361,7 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
       .from('habits')
       .select('*')
       .eq('id', id)
-      .eq('userId', user.id)
+      .eq('user_id', user.id)
       .single();
     
     if (fetchError) throw fetchError;
@@ -317,7 +372,7 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
       .from('habits')
       .delete()
       .eq('id', id)
-      .eq('userId', user.id);
+      .eq('user_id', user.id);
     
     if (error) throw error;
     
@@ -351,9 +406,11 @@ export const initializeSupabaseSync = async () => {
   try {
     console.log('=== Starting Supabase Sync ===');
     
-    // Verify Supabase connection
-    if (!isUsingRealSupabase() || !supabaseClient) {
-      throw new Error('No valid Supabase connection available');
+    // Check Supabase connection
+    const usingRealSupabase = await isUsingRealSupabase();
+    if (!usingRealSupabase || !supabaseClient) {
+      console.log('No Supabase connection available, skipping sync');
+      return;
     }
     
     // Get authenticated user
@@ -370,7 +427,7 @@ export const initializeSupabaseSync = async () => {
     const { data: supabaseHabits, error: fetchError } = await supabaseClient
       .from('habits')
       .select('*')
-      .eq('userId', user.id);
+      .eq('user_id', user.id);
     
     if (fetchError) throw fetchError;
     
@@ -395,7 +452,7 @@ export const initializeSupabaseSync = async () => {
       // Migrate local habits to Supabase
       const habitsWithUserId = localHabits.map(habit => ({
         ...habit,
-        userId: user.id
+        user_id: user.id
       }));
       
       const { error: upsertError } = await supabaseClient

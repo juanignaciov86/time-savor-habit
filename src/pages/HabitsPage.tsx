@@ -32,14 +32,24 @@ const HabitsPage: React.FC = () => {
   // Load habits and initialize sync
   useEffect(() => {
     const loadHabits = async () => {
-      setIsLoading(true);
-      // Initialize Supabase sync
-      await initializeSupabaseSync();
-      
-      // Load habits from Supabase
-      const habitsList = await getHabits();
-      setHabits(habitsList);
-      setIsLoading(false);
+      try {
+        setIsLoading(true);
+        // Initialize Supabase sync
+        await initializeSupabaseSync();
+        
+        // Load habits from Supabase
+        const habitsList = await getHabits();
+        setHabits(habitsList);
+      } catch (error) {
+        console.error('Error loading habits:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load habits. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
     };
     
     loadHabits();
