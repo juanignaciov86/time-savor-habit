@@ -7,15 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabaseClient } from '../utils/supabaseClient';
-import { Plus, Trash, Edit, Check, X, Share, Download, Loader2 } from 'lucide-react';
+import { Plus, Trash, Edit, Check, X, Loader2 } from 'lucide-react';
 import { 
   Habit, 
   getHabits, 
   addHabit, 
   updateHabit, 
   deleteHabit,
-  exportHabits,
-  importHabits,
   initializeSupabaseSync
 } from '../utils/habitUtils';
 
@@ -28,8 +26,6 @@ const HabitsPage: React.FC = () => {
     description: '',
     color: '#007AFF'
   });
-  const [importValue, setImportValue] = useState('');
-  const [showImport, setShowImport] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -153,93 +149,6 @@ const HabitsPage: React.FC = () => {
     }
   };
 
-  // Handle export
-  const handleExport = async () => {
-    try {
-      setIsLoading(true);
-      const data = await exportHabits();
-      
-      // Create shareable content
-      if (navigator.share) {
-        navigator.share({
-          title: 'Time Savor Habits',
-          text: data
-        }).catch(error => {
-          console.log('Error sharing', error);
-          copyToClipboard(data);
-        });
-      } else {
-        copyToClipboard(data);
-      }
-    } catch (error) {
-      console.error("Error exporting habits:", error);
-      toast({
-        title: "Error",
-        description: "Failed to export habits. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Copy to clipboard helper
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast({
-        title: "Data copied",
-        description: "Habit data has been copied to clipboard"
-      });
-    }, 
-    err => {
-      console.error('Could not copy text: ', err);
-    });
-  };
-
-  // Handle import
-  const handleImport = async () => {
-    if (!importValue.trim()) {
-      toast({
-        title: "Import failed",
-        description: "Please paste the habit data first",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const success = await importHabits(importValue);
-      
-      if (success) {
-        // Reload habits
-        const habitsList = await getHabits();
-        setHabits(habitsList);
-        setShowImport(false);
-        setImportValue('');
-        toast({
-          title: "Import successful",
-          description: "Your habits have been imported"
-        });
-      } else {
-        toast({
-          title: "Import failed",
-          description: "Invalid data format",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error("Error importing habits:", error);
-      toast({
-        title: "Error",
-        description: "Failed to import habits. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <Layout>
       <header className="mb-6">
@@ -247,74 +156,17 @@ const HabitsPage: React.FC = () => {
         <p className="text-ios-gray">Manage your habits</p>
       </header>
       
-      {/* Import/Export Buttons */}
-      <div className="flex justify-between mb-6">
-        <div className="space-x-2">
-          <Button 
-            onClick={() => setShowForm(true)}
-            className="flex items-center"
-            variant={showForm ? "secondary" : "default"}
-            disabled={isLoading}
-          >
-            {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />} Add Habit
-          </Button>
-        </div>
-        <div className="space-x-2">
-          <Button
-            onClick={() => setShowImport(prev => !prev)}
-            variant="outline"
-            className="flex items-center"
-            disabled={isLoading}
-          >
-            <Download className="mr-1 h-4 w-4" /> Import
-          </Button>
-          <Button
-            onClick={handleExport}
-            variant="outline"
-            className="flex items-center"
-            disabled={isLoading}
-          >
-            <Share className="mr-1 h-4 w-4" /> Export
-          </Button>
-        </div>
+      {/* Add Button */}
+      <div className="mb-6">
+        <Button 
+          onClick={() => setShowForm(true)}
+          className="flex items-center"
+          variant={showForm ? "secondary" : "default"}
+          disabled={isLoading}
+        >
+          {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />} Add Habit
+        </Button>
       </div>
-
-      {/* Import Form */}
-      {showImport && (
-        <div className="ios-card mb-6 p-4">
-          <form onSubmit={(e) => { e.preventDefault(); handleImport(); }} className="space-y-4">
-            <div>
-              <Label htmlFor="importData">Paste Habit Data</Label>
-              <Textarea
-                id="importData"
-                value={importValue}
-                onChange={(e) => setImportValue(e.target.value)}
-                placeholder="Paste the exported habit data here"
-                rows={4}
-                disabled={isLoading}
-              />
-            </div>
-            <div className="flex justify-end space-x-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => { setShowImport(false); setImportValue(''); }}
-                className="flex items-center"
-                disabled={isLoading}
-              >
-                <X className="mr-1 h-4 w-4" /> Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                className="flex items-center"
-                disabled={isLoading}
-              >
-                {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />} Import
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* Add/Edit Form */}
       {showForm ? (

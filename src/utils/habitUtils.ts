@@ -1,4 +1,3 @@
-
 // Habit management utilities
 import { supabaseClient, isUsingRealSupabase } from './supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
@@ -315,79 +314,6 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
     
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
     return true;
-  }
-};
-
-// Export habits data
-export const exportHabits = async (): Promise<string> => {
-  const habits = await getHabits();
-  return JSON.stringify(habits);
-};
-
-// Import habits data
-export const importHabits = async (jsonData: string): Promise<boolean> => {
-  try {
-    const habits = JSON.parse(jsonData) as Habit[];
-    
-    // Validate imported data
-    const isValidData = Array.isArray(habits) && 
-      habits.every(habit => 
-        typeof habit.id === 'string' && 
-        typeof habit.name === 'string' &&
-        typeof habit.color === 'string' &&
-        typeof habit.createdAt === 'number'
-      );
-    
-    if (!isValidData) {
-      return false;
-    }
-    
-    if (!isUsingRealSupabase() || !supabaseClient) {
-      // Fallback to localStorage
-      localStorage.setItem(STORAGE_KEY, jsonData);
-      return true;
-    }
-
-    const { data: userData } = await supabaseClient.auth.getUser();
-    const userId = userData?.user?.id;
-    
-    if (!userId) {
-      // Fallback to localStorage
-      localStorage.setItem(STORAGE_KEY, jsonData);
-      return true;
-    }
-    
-    // Update userId for all habits
-    const habitsWithUserId = habits.map(h => ({
-      ...h,
-      userId
-    }));
-    
-    // Convert habits to Record<string, unknown>[] for proper typing
-    const habitsRecords: Record<string, unknown>[] = habitsWithUserId.map(habit => ({
-      id: habit.id,
-      name: habit.name,
-      description: habit.description,
-      color: habit.color,
-      createdAt: habit.createdAt,
-      userId: habit.userId
-    }));
-    
-    // Insert into Supabase (upsert to handle existing records)
-    const { error } = await supabaseClient
-      .from('habits')
-      .upsert(habitsRecords, { onConflict: 'id' });
-    
-    if (error) {
-      console.error('Error importing habits to Supabase:', error);
-      // Fallback to localStorage
-      localStorage.setItem(STORAGE_KEY, jsonData);
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('Failed to import habits:', error);
-    return false;
   }
 };
 
