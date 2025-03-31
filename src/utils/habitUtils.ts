@@ -1,6 +1,13 @@
 // Habit management utilities
 import { supabaseClient, isUsingRealSupabase } from './supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  storeHabits,
+  getStoredHabits,
+  addPendingAction,
+  isOnline,
+  registerConnectivityListeners
+} from './offlineStorage';
 
 export interface Habit {
   id: string;
@@ -27,31 +34,24 @@ export const getHabitsSync = (): Habit[] => {
 
 // Get all habits - async version for database operations
 export const getHabits = async (): Promise<Habit[]> => {
+  // Always return stored habits first for immediate display
+  const storedHabits = getStoredHabits();
+  
   try {
-    console.log('=== Getting Habits ===');
+    // If offline, return stored habits
+    if (!isOnline()) {
+      console.log('Offline mode: using stored habits');
+      return storedHabits;
+    }
     
     // Check if we're authenticated
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user?.id) {
-      // Handle missing session error gracefully
-      if (userError?.message?.includes('Auth session missing')) {
-        console.log('No auth session found (user not logged in), using localStorage');
-      } else {
-        console.log('No authenticated user, falling back to localStorage');
-      }
-      return getHabitsSync();
+      console.log('No authenticated user, using stored habits');
+      return storedHabits;
     }
 
-    // Check Supabase connection
-    const usingRealSupabase = await isUsingRealSupabase();
-    console.log('Using Supabase:', usingRealSupabase);
-    
-    if (!usingRealSupabase || !supabaseClient) {
-      console.log('No Supabase connection, falling back to localStorage');
-      return getHabitsSync();
-    }
-    
-    console.log('Fetching habits for user:', user.id);
+    // Fetch from Supabase
     const { data, error } = await supabaseClient
       .from('habits')
       .select('*')
@@ -60,17 +60,9 @@ export const getHabits = async (): Promise<Habit[]> => {
 
     if (error) throw error;
     
-    // If no data from Supabase, check cache first
     if (!data) {
-      console.log('No habits found in Supabase, checking cache');
-      const localData = localStorage.getItem(STORAGE_KEY);
-      if (localData) {
-        const cachedHabits = JSON.parse(localData);
-        console.log('Using cached habits:', cachedHabits.length);
-        return cachedHabits;
-      }
-      console.log('No cached habits found');
-      return [];
+      console.log('No habits found in Supabase');
+      return storedHabits;
     }
     
     // Type cast and validate data
@@ -83,12 +75,8 @@ export const getHabits = async (): Promise<Habit[]> => {
       userId: String(item.user_id)
     }));
     
-    console.log(`Found ${habitsData.length} habits in Supabase`);
-    
-    // Only update localStorage if we have new data
-    if (habitsData.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(habitsData));
-    }
+    // Update stored habits
+    storeHabits(habitsData);
     return habitsData;
   } catch (error) {
     console.error('Error fetching habits:', error);
@@ -273,12 +261,10 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
     if (userError || !user?.id) {
       console.log('No authenticated user, falling back to localStorage');
       const localHabits = getHabitsSync();
-      const habit = localHabits.find(h => h.id === id);
-      if (!habit) return null;
-      const updatedHabit = { ...habit, ...updates };
-      const updatedHabits = localHabits.map(h => h.id === id ? updatedHabit : h);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHabits));
-      return updatedHabit;
+      const filteredHabits = localHabits.filter(h => h.id !== id);
+      if (filteredHabits.length === localHabits.length) return false;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
+      return true;
     }
     
     // First verify the habit exists and belongs to the user
@@ -364,12 +350,10 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
     if (userError || !user?.id) {
       console.log('No authenticated user, falling back to localStorage');
       const localHabits = getHabitsSync();
-      const habit = localHabits.find(h => h.id === id);
-      if (!habit) return null;
-      const updatedHabit = { ...habit, ...updates };
-      const updatedHabits = localHabits.map(h => h.id === id ? updatedHabit : h);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHabits));
-      return updatedHabit;
+      const filteredHabits = localHabits.filter(h => h.id !== id);
+      if (filteredHabits.length === localHabits.length) return false;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
+      return true;
     }
     
     // First verify the habit exists and belongs to the user

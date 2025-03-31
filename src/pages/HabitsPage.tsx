@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabaseClient } from '../utils/supabaseClient';
-import { Plus, Trash, Edit, Check, X, Loader2 } from 'lucide-react';
+import { Plus, Trash, Edit, Check, X, Wifi, WifiOff } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,9 +27,10 @@ import {
   deleteHabit,
   initializeSupabaseSync
 } from '../utils/habitUtils';
+import { getStoredHabits, registerConnectivityListeners, isOnline } from '../utils/offlineStorage';
 
 const HabitsPage: React.FC = () => {
-  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habits, setHabits] = useState<Habit[]>(getStoredHabits());
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -37,17 +38,15 @@ const HabitsPage: React.FC = () => {
     description: '',
     color: '#007AFF'
   });
-  const [isLoading, setIsLoading] = useState(false);
+  const [isOnlineState, setIsOnlineState] = useState(isOnline());
+  const [isSyncing, setIsSyncing] = useState(false);
   const { toast } = useToast();
 
   // Load habits and initialize sync
   useEffect(() => {
     const loadHabits = async () => {
-      // Clear habits first
-      setHabits([]);
-      
       try {
-        setIsLoading(true);
+        setIsSyncing(true);
         // Initialize Supabase sync
         await initializeSupabaseSync();
         
@@ -56,28 +55,52 @@ const HabitsPage: React.FC = () => {
         setHabits(habitsList);
       } catch (error) {
         console.error('Error loading habits:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load habits. Please try again.",
-          variant: "destructive"
-        });
+        if (!error.message.includes('network')) {
+          toast({
+            title: "Sync Error",
+            description: "Using cached data. Changes will sync when back online.",
+            variant: "default"
+          });
+        }
       } finally {
-        setIsLoading(false);
+        setIsSyncing(false);
       }
     };
     
-    loadHabits();
+    // Set up online/offline listeners
+    const cleanup = registerConnectivityListeners({
+      onOnline: () => {
+        setIsOnlineState(true);
+        loadHabits(); // Sync when coming back online
+        toast({
+          title: "Back Online",
+          description: "Syncing your changes..."
+        });
+      },
+      onOffline: () => {
+        setIsOnlineState(false);
+        toast({
+          title: "Offline Mode",
+          description: "Changes will sync when back online."
+        });
+      }
+    });
+    
+    // Initial load
+    if (isOnline()) {
+      loadHabits();
+    }
     
     // Listen for auth changes
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         await loadHabits();
       }
     });
 
-    // Cleanup subscription
+    // Cleanup subscriptions
     return () => {
+      cleanup();
       subscription.unsubscribe();
     };
   }, []);
@@ -98,7 +121,7 @@ const HabitsPage: React.FC = () => {
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setIsSyncing(true);
     
     try {
       if (editingId) {
@@ -128,7 +151,7 @@ const HabitsPage: React.FC = () => {
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      setIsSyncing(false);
       resetForm();
     }
   };
@@ -146,7 +169,7 @@ const HabitsPage: React.FC = () => {
 
   // Handle delete
   const handleDelete = async (id: string) => {
-    setIsLoading(true);
+    setIsSyncing(true);
     try {
       const success = await deleteHabit(id);
       if (success) {
@@ -164,7 +187,7 @@ const HabitsPage: React.FC = () => {
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -184,9 +207,9 @@ const HabitsPage: React.FC = () => {
           onClick={() => setShowForm(true)}
           className="flex items-center"
           variant={showForm ? "secondary" : "default"}
-          disabled={isLoading}
+          disabled={isSyncing}
         >
-          {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />} Add Habit
+          <Plus className="mr-1 h-4 w-4" /> Add Habit
         </Button>
       </div>
 
@@ -203,7 +226,7 @@ const HabitsPage: React.FC = () => {
                 onChange={handleChange}
                 placeholder="e.g., Reading"
                 required
-                disabled={isLoading}
+                disabled={isSyncing}
               />
             </div>
             
@@ -216,7 +239,7 @@ const HabitsPage: React.FC = () => {
                 onChange={handleChange}
                 placeholder="Add some details about this habit"
                 rows={3}
-                disabled={isLoading}
+                disabled={isSyncing}
               />
             </div>
             
@@ -230,7 +253,7 @@ const HabitsPage: React.FC = () => {
                   value={formData.color}
                   onChange={handleChange}
                   className="w-12 h-10 p-1"
-                  disabled={isLoading}
+                  disabled={isSyncing}
                 />
                 <span className="text-ios-gray text-sm">
                   Choose a color for this habit
@@ -244,7 +267,7 @@ const HabitsPage: React.FC = () => {
                 variant="outline"
                 onClick={resetForm}
                 className="flex items-center"
-                disabled={isLoading}
+                disabled={isSyncing}
               >
                 <X className="mr-1 h-4 w-4" />
                 Cancel
@@ -252,9 +275,9 @@ const HabitsPage: React.FC = () => {
               <Button 
                 type="submit" 
                 className="flex items-center"
-                disabled={isLoading}
+                disabled={isSyncing}
               >
-                {isLoading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
+                <Check className="mr-1 h-4 w-4" />
                 {editingId ? "Update" : "Add"} Habit
               </Button>
             </div>
@@ -262,49 +285,55 @@ const HabitsPage: React.FC = () => {
         </div>
       ) : null}
 
-      {/* Loading State */}
-      {isLoading && habits.length === 0 && (
-        <div className="ios-card p-6 flex justify-center items-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2">Loading habits...</span>
-        </div>
-      )}
+      {/* Connection Status */}
+      <div className={`flex items-center justify-end mb-2 text-sm ${isOnlineState ? 'text-green-600' : 'text-orange-500'}`}>
+        {isOnlineState ? (
+          <div className="flex items-center gap-1">
+            <Wifi className="h-4 w-4" />
+            {isSyncing ? 'Syncing...' : 'Online'}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            <WifiOff className="h-4 w-4" />
+            Offline
+          </div>
+        )}
+      </div>
 
       {/* Habits List */}
-      {!isLoading && (
-        <div className="space-y-4">
-          {habits.length === 0 ? (
-            <div className="ios-card p-6 text-center">
-              <p className="text-ios-gray">No habits added yet. Create your first habit!</p>
-            </div>
-          ) : (
-            habits.map(habit => (
-              <div 
-                key={habit.id} 
-                className="ios-card p-4 flex justify-between items-center"
-                style={{ borderLeft: `4px solid ${habit.color}` }}
-              >
-                <div>
-                  <h3 className="font-medium">{habit.name}</h3>
-                  {habit.description && (
-                    <p className="text-sm text-ios-gray">{habit.description}</p>
-                  )}
-                </div>
-                <div className="flex space-x-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleEdit(habit)}
-                    disabled={isLoading}
-                  >
-                    <Edit className="h-4 w-4 text-ios-gray" />
-                  </Button>
+      <div className="space-y-4">
+        {habits.length === 0 ? (
+          <div className="ios-card p-6 text-center">
+            <p className="text-ios-gray">No habits added yet. Create your first habit!</p>
+          </div>
+        ) : (
+          habits.map(habit => (
+            <div 
+              key={habit.id} 
+              className="ios-card p-4 flex justify-between items-center"
+              style={{ borderLeft: `4px solid ${habit.color}` }}
+            >
+              <div>
+                <h3 className="font-medium">{habit.name}</h3>
+                {habit.description && (
+                  <p className="text-sm text-ios-gray">{habit.description}</p>
+                )}
+              </div>
+              <div className="flex space-x-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleEdit(habit)}
+                  disabled={isSyncing}
+                >
+                  <Edit className="h-4 w-4 text-ios-gray" />
+                </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={isLoading}
+                        disabled={isSyncing}
                       >
                         <Trash className="h-4 w-4 text-ios-gray" />
                       </Button>
@@ -332,7 +361,6 @@ const HabitsPage: React.FC = () => {
             ))
           )}
         </div>
-      )}
     </Layout>
   );
 };
