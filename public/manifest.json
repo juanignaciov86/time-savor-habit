@@ -2,6 +2,7 @@
 {
   "short_name": "Time Savor",
   "name": "Time Savor - Habit Tracker",
+  "description": "Track and build your daily habits effectively",
   "icons": [
     {
       "src": "favicon.ico",
@@ -21,10 +22,16 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "id": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "theme_color": "#007AFF",
   "background_color": "#F2F2F7",
   "orientation": "portrait",
-  "scope": "/"
+  "scope": "/",
+  "prefer_related_applications": false,
+  "categories": ["productivity", "lifestyle"],
+  "lang": "en",
+  "dir": "ltr"
 }

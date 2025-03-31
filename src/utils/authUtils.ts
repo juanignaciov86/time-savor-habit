@@ -11,7 +11,12 @@ export const isAuthenticated = async (): Promise<boolean> => {
 
     const { data: { user }, error } = await supabaseClient.auth.getUser();
     if (error) {
-      console.error('Error checking authentication:', error);
+      // Handle missing session error gracefully
+      if (error.message?.includes('Auth session missing')) {
+        console.log('No auth session found (user not logged in)');
+      } else {
+        console.error('Error checking authentication:', error);
+      }
       return false;
     }
 

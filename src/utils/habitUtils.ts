@@ -33,7 +33,12 @@ export const getHabits = async (): Promise<Habit[]> => {
     // Check if we're authenticated
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user?.id) {
-      console.log('No authenticated user, falling back to localStorage');
+      // Handle missing session error gracefully
+      if (userError?.message?.includes('Auth session missing')) {
+        console.log('No auth session found (user not logged in), using localStorage');
+      } else {
+        console.log('No authenticated user, falling back to localStorage');
+      }
       return getHabitsSync();
     }
 

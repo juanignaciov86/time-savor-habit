@@ -18,9 +18,15 @@ const initializeApp = async () => {
     
     // Check if user is authenticated
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError) throw authError;
-
-    if (user) {
+    
+    if (authError) {
+      // Handle missing session error gracefully
+      if (authError.message?.includes('Auth session missing')) {
+        console.log('No auth session found (user not logged in)');
+      } else {
+        console.warn('Auth error:', authError.message);
+      }
+    } else if (user) {
       console.log('User is authenticated:', user.id);
       // Import and run sync
       const { initializeSupabaseSync } = await import('./utils/habitUtils');
