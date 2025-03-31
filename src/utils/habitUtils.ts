@@ -30,18 +30,19 @@ export const getHabits = async (): Promise<Habit[]> => {
   try {
     console.log('=== Getting Habits ===');
     
+    // Check if we're authenticated
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user?.id) {
+      console.log('No authenticated user, falling back to localStorage');
+      return getHabitsSync();
+    }
+
     // Check Supabase connection
     const usingRealSupabase = await isUsingRealSupabase();
     console.log('Using Supabase:', usingRealSupabase);
     
     if (!usingRealSupabase || !supabaseClient) {
       console.log('No Supabase connection, falling back to localStorage');
-      return getHabitsSync();
-    }
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user?.id) {
-      console.log('No authenticated user, falling back to localStorage');
       return getHabitsSync();
     }
     
@@ -56,6 +57,7 @@ export const getHabits = async (): Promise<Habit[]> => {
     
     if (!data) {
       console.log('No habits found in Supabase');
+      localStorage.removeItem(STORAGE_KEY);
       return [];
     }
     
@@ -72,7 +74,11 @@ export const getHabits = async (): Promise<Habit[]> => {
     console.log(`Found ${habitsData.length} habits in Supabase`);
     
     // Store in localStorage for offline access
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(habitsData));
+    if (habitsData.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(habitsData));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
     return habitsData;
   } catch (error) {
     console.error('Error fetching habits:', error);
@@ -440,11 +446,13 @@ export const initializeSupabaseSync = async () => {
       local: localHabits.length
     });
     
+    // Always use Supabase as source of truth
+    console.log('Using Supabase as source of truth');
     if (supabaseHabits && supabaseHabits.length > 0) {
-      // If we have Supabase data, it's the source of truth
-      console.log('Using Supabase as source of truth');
       localStorage.setItem(STORAGE_KEY, JSON.stringify(supabaseHabits));
-      return;
+    } else {
+      // If Supabase has no data, clear localStorage
+      localStorage.removeItem(STORAGE_KEY);
     }
     
     if (localHabits.length > 0) {
