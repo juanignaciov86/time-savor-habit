@@ -34,15 +34,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   
   return (
     <div className="flex flex-col h-screen max-w-md mx-auto bg-ios-background">
-      <header className="p-4 flex justify-between items-center">
-        <h1 className="text-lg font-semibold">Time Savor</h1>
-        <button 
-          onClick={handleLogout}
-          className="text-ios-gray flex items-center text-sm"
-        >
-          <LogOut className="h-4 w-4 mr-1" /> Logout
-        </button>
-      </header>
       <main className="flex-grow overflow-y-auto p-4">
         {children}
       </main>
@@ -75,6 +66,13 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <History className="h-6 w-6" />
           <span className="text-xs mt-1">History</span>
         </Link>
+        <button 
+          onClick={handleLogout}
+          className={`p-2 flex flex-col items-center text-ios-gray`}
+        >
+          <LogOut className="h-6 w-6" />
+          <span className="text-xs mt-1">Logout</span>
+        </button>
       </nav>
     </div>
   );
