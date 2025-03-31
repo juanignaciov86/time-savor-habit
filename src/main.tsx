@@ -7,27 +7,42 @@ import { supabaseClient } from './utils/supabaseClient';
 
 console.log('Starting application...');
 
-// Log and check Supabase client initialization status
-if (supabaseClient === null) {
-  console.log('Supabase client could not be initialized. The app will use localStorage for data storage.');
-} else {
-  console.log('Supabase client initialized successfully.');
-  
-  // Import and initialize sync function only if client exists
-  import('./utils/habitUtils').then(({ initializeSupabaseSync }) => {
-    initializeSupabaseSync().catch(error => {
-      console.error('Failed to initialize Supabase sync:', error);
-    });
-  }).catch(error => {
-    console.error('Error importing habitUtils:', error);
-  });
-}
+// Initialize Supabase and sync data before rendering
+const initializeApp = async () => {
+  try {
+    if (!supabaseClient) {
+      throw new Error('Supabase client could not be initialized');
+    }
 
-const rootElement = document.getElementById('root');
-if (!rootElement) throw new Error('Failed to find the root element');
+    console.log('Supabase client initialized successfully');
+    
+    // Check if user is authenticated
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError) throw authError;
 
-console.log('Rendering React app...');
-createRoot(rootElement).render(<App />);
+    if (user) {
+      console.log('User is authenticated:', user.id);
+      // Import and run sync
+      const { initializeSupabaseSync } = await import('./utils/habitUtils');
+      await initializeSupabaseSync();
+      console.log('Supabase sync completed');
+    } else {
+      console.log('No authenticated user');
+    }
+  } catch (error) {
+    console.error('Error during initialization:', error);
+  }
+
+  // Render the app regardless of initialization result
+  const rootElement = document.getElementById('root');
+  if (!rootElement) throw new Error('Failed to find the root element');
+
+  console.log('Rendering React app...');
+  createRoot(rootElement).render(<App />);
+};
+
+// Start initialization
+initializeApp();
 
 // Register service worker
 if ('serviceWorker' in navigator) {

@@ -29,36 +29,48 @@ export const getHabitsSync = (): Habit[] => {
 export const getHabits = async (): Promise<Habit[]> => {
   try {
     // Debug logs
-    console.log('isUsingRealSupabase:', isUsingRealSupabase());
+    const usingRealSupabase = isUsingRealSupabase();
+    console.log('=== Habit Storage Debug ===');
+    console.log('isUsingRealSupabase:', usingRealSupabase);
     console.log('supabaseClient exists:', !!supabaseClient);
+    console.log('supabaseClient:', supabaseClient);
     
     // Check if we're using a real Supabase instance
-    if (!isUsingRealSupabase() || !supabaseClient) {
-      console.log('Using localStorage fallback for habits (no Supabase URL configured)');
+    if (!usingRealSupabase || !supabaseClient) {
+      console.log('Using localStorage fallback for habits because:', {
+        usingRealSupabase,
+        hasSupabaseClient: !!supabaseClient
+      });
       const data = localStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : [];
     }
 
-    const { data: user } = await supabaseClient.auth.getUser();
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    console.log('Auth state:', { user, userError });
     const userId = user?.id;
     
     if (!userId) {
-      // Fallback to localStorage if not authenticated
+      console.log('No authenticated user found, falling back to localStorage');
       const data = localStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : [];
     }
+    
+    console.log('Found authenticated user:', userId);
 
+    console.log('Fetching habits from Supabase for user:', userId);
     const { data, error } = await supabaseClient
       .from('habits')
       .select('*')
       .eq('userId', userId);
 
     if (error) {
-      console.error('Error fetching habits:', error);
-      // Fallback to localStorage
+      console.error('Error fetching habits from Supabase:', error);
+      console.log('Falling back to localStorage due to Supabase error');
       const localData = localStorage.getItem(STORAGE_KEY);
       return localData ? JSON.parse(localData) : [];
     }
+    
+    console.log('Successfully fetched habits from Supabase:', data);
 
     // Proper type casting with type safety
     const habitsData = data ? data.map(item => ({
@@ -125,64 +137,73 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
 // Add a new habit
 export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>): Promise<Habit> => {
   try {
+    console.log('=== Adding New Habit ===');
+    console.log('Initial habit data:', habit);
+    
+    // Check Supabase connection
+    const usingRealSupabase = isUsingRealSupabase();
+    console.log('Using Supabase:', usingRealSupabase);
+    
+    if (!usingRealSupabase || !supabaseClient) {
+      console.log('No Supabase connection, using localStorage only');
+      const newHabit: Habit = {
+        ...habit,
+        id: uuidv4(),
+        createdAt: Date.now(),
+        userId: 'anonymous'
+      };
+      
+      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      habits.push(newHabit);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+      return newHabit;
+    }
+    
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    console.log('Auth state:', { user, userError });
+    
+    if (!user?.id) {
+      throw new Error('No authenticated user found');
+    }
+    
     const newHabit: Habit = {
       ...habit,
       id: uuidv4(),
       createdAt: Date.now(),
-      userId: 'anonymous'
+      userId: user.id
     };
     
-    if (isUsingRealSupabase() && supabaseClient) {
-      const { data: userData } = await supabaseClient.auth.getUser();
-      const userId = userData?.user?.id;
-      
-      if (userId) {
-        newHabit.userId = userId;
-        
-        // Explicitly convert Habit to Record<string, unknown>
-        const habitRecord: Record<string, unknown> = {
-          id: newHabit.id,
-          name: newHabit.name,
-          description: newHabit.description,
-          color: newHabit.color,
-          createdAt: newHabit.createdAt,
-          userId: newHabit.userId
-        };
-        
-        const { data, error } = await supabaseClient
-          .from('habits')
-          .insert([habitRecord])
-          .select();
-        
-        if (error) {
-          console.error('Error adding habit:', error);
-        } else if (data && data.length > 0) {
-          // Store in localStorage as backup
-          const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-          
-          // Proper type casting
-          const insertedHabit: Habit = {
-            id: String(data[0].id),
-            name: String(data[0].name),
-            description: String(data[0].description || ''),
-            color: String(data[0].color),
-            createdAt: Number(data[0].createdAt),
-            userId: String(data[0].userId)
-          };
-          
-          habits.push(insertedHabit);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-          return insertedHabit;
-        }
-      }
+    console.log('Inserting habit into Supabase:', newHabit);
+    
+    const { data, error } = await supabaseClient
+      .from('habits')
+      .insert([newHabit])
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Supabase error adding habit:', error);
+      throw error;
     }
     
-    // Fallback to localStorage
-    const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    habits.push(newHabit);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+    if (!data) {
+      throw new Error('No data returned from Supabase insert');
+    }
     
-    return newHabit;
+    console.log('Successfully added habit to Supabase:', data);
+    
+    // Type cast the returned data
+    const insertedHabit: Habit = {
+      id: String(data.id),
+      name: String(data.name),
+      description: String(data.description || ''),
+      color: String(data.color),
+      createdAt: Number(data.createdAt),
+      userId: String(data.userId)
+    };
+    
+    return insertedHabit;
   } catch (error) {
     console.error('Failed to add habit:', error);
     
@@ -324,58 +345,66 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
 // Initialize Supabase table if it doesn't exist
 export const initializeSupabaseSync = async () => {
   try {
-    // Skip sync if not using real Supabase or if client is null
+    console.log('=== Starting Supabase Sync ===');
+    
+    // Verify Supabase connection
     if (!isUsingRealSupabase() || !supabaseClient) {
-      console.log('Skipping Supabase sync (using demo/local mode)');
+      throw new Error('No valid Supabase connection available');
+    }
+    
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError) throw userError;
+    
+    if (!user) {
+      throw new Error('No authenticated user found');
+    }
+    
+    console.log('Authenticated user:', user.id);
+    
+    // First, fetch all habits from Supabase
+    const { data: supabaseHabits, error: fetchError } = await supabaseClient
+      .from('habits')
+      .select('*')
+      .eq('userId', user.id);
+    
+    if (fetchError) throw fetchError;
+    
+    // Get local habits
+    const localData = localStorage.getItem(STORAGE_KEY);
+    const localHabits = localData ? (JSON.parse(localData) as Habit[]) : [];
+    
+    console.log('Found habits:', {
+      supabase: supabaseHabits?.length || 0,
+      local: localHabits.length
+    });
+    
+    if (supabaseHabits && supabaseHabits.length > 0) {
+      // If we have Supabase data, it's the source of truth
+      console.log('Using Supabase as source of truth');
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(supabaseHabits));
       return;
     }
     
-    // Check if the user is authenticated
-    const { data } = await supabaseClient.auth.getUser();
-    const user = data?.user;
-    
-    if (user) {
-      console.log('User is authenticated, syncing data');
+    if (localHabits.length > 0) {
+      console.log('Migrating local habits to Supabase');
+      // Migrate local habits to Supabase
+      const habitsWithUserId = localHabits.map(habit => ({
+        ...habit,
+        userId: user.id
+      }));
       
-      // Check if we have local data to migrate
-      const localData = localStorage.getItem(STORAGE_KEY);
-      if (localData) {
-        const localHabits = JSON.parse(localData) as Habit[];
-        
-        if (localHabits.length > 0) {
-          // Update all local habits with the user's ID
-          const habitsWithUserId = localHabits.map(habit => ({
-            ...habit,
-            userId: user.id
-          }));
-          
-          // Convert habits to Record<string, unknown>[] for proper typing
-          const habitsRecords: Record<string, unknown>[] = habitsWithUserId.map(habit => ({
-            id: habit.id,
-            name: habit.name,
-            description: habit.description,
-            color: habit.color,
-            createdAt: habit.createdAt,
-            userId: habit.userId
-          }));
-          
-          // Insert into Supabase
-          const { error } = await supabaseClient
-            .from('habits')
-            .upsert(habitsRecords, { onConflict: 'id' });
-            
-          if (!error) {
-            console.log('Local habits migrated to Supabase');
-            // Clear local storage after successful migration
-            // Don't clear yet, keep as backup
-            // localStorage.removeItem(STORAGE_KEY);
-          } else {
-            console.error('Failed to migrate local habits:', error);
-          }
-        }
-      }
+      const { error: upsertError } = await supabaseClient
+        .from('habits')
+        .upsert(habitsWithUserId)
+        .select();
+      
+      if (upsertError) throw upsertError;
+      
+      console.log('Successfully migrated local habits to Supabase');
     }
   } catch (error) {
-    console.error('Supabase sync error:', error);
+    console.error('Failed to initialize Supabase sync:', error);
+    throw error; // Re-throw to handle in the calling code
   }
 };
