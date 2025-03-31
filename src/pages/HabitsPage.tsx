@@ -47,21 +47,33 @@ const HabitsPage: React.FC = () => {
     const loadHabits = async () => {
       try {
         setIsSyncing(true);
-        // Initialize Supabase sync
-        await initializeSupabaseSync();
         
-        // Load habits from Supabase
-        const habitsList = await getHabits();
-        setHabits(habitsList);
+        // Always start with stored habits for immediate display
+        const storedHabits = getStoredHabits();
+        setHabits(storedHabits);
+        
+        // If we're offline, just use stored habits
+        if (!isOnline()) {
+          console.log('Offline mode: using stored habits');
+          return;
+        }
+        
+        // Try to sync with Supabase
+        try {
+          await initializeSupabaseSync();
+          const habitsList = await getHabits();
+          setHabits(habitsList);
+        } catch (error) {
+          if (!error.message.includes('network')) {
+            toast({
+              title: "Sync Error",
+              description: "Using cached data. Changes will sync when back online.",
+              variant: "default"
+            });
+          }
+        }
       } catch (error) {
         console.error('Error loading habits:', error);
-        if (!error.message.includes('network')) {
-          toast({
-            title: "Sync Error",
-            description: "Using cached data. Changes will sync when back online.",
-            variant: "default"
-          });
-        }
       } finally {
         setIsSyncing(false);
       }
@@ -86,10 +98,11 @@ const HabitsPage: React.FC = () => {
       }
     });
     
-    // Initial load
-    if (isOnline()) {
-      loadHabits();
-    }
+    // Initial load - always load, even if offline
+    loadHabits();
+    
+    // Check initial online status
+    setIsOnlineState(isOnline());
     
     // Listen for auth changes
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {

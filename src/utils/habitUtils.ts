@@ -18,14 +18,13 @@ export interface Habit {
   userId: string; // User ID from Supabase Auth
 }
 
-const STORAGE_KEY = 'time-savor-habits'; // Kept for fallback
+const STORAGE_KEY = 'habits'; // Must match HABITS_KEY in offlineStorage.ts
 
 // Get all habits - sync wrapper for components that can't handle async
 export const getHabitsSync = (): Habit[] => {
   try {
-    // Return from localStorage as fallback
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    // Use getStoredHabits for consistency
+    return getStoredHabits();
   } catch (error) {
     console.error('Failed to get habits from localStorage:', error);
     return [];
@@ -134,18 +133,38 @@ export const getHabitById = async (id: string): Promise<Habit | undefined> => {
 };
 
 // Handle offline mode for habit operations
-const handleOfflineMode = (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>): Habit => {
+const handleOfflineMode = (habit: Omit<Habit, 'createdAt' | 'userId'> & { id?: string }, type: 'add' | 'update' | 'delete' = 'add'): Habit => {
   console.log('Using offline mode');
   const offlineHabit: Habit = {
     ...habit,
-    id: uuidv4(),
+    id: habit.id || uuidv4(),
     createdAt: Date.now(),
     userId: 'offline'
   };
   
-  const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  habits.push(offlineHabit);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+  // Get existing habits using the shared function
+  const habits = getStoredHabits();
+  
+  // Update habits array based on operation type
+  let updatedHabits: Habit[];
+  if (type === 'add') {
+    updatedHabits = [...habits, offlineHabit];
+  } else if (type === 'update') {
+    updatedHabits = habits.map(h => h.id === offlineHabit.id ? offlineHabit : h);
+  } else if (type === 'delete') {
+    updatedHabits = habits.filter(h => h.id !== offlineHabit.id);
+  } else {
+    updatedHabits = habits;
+  }
+  
+  // Store updated habits using the shared function
+  storeHabits(updatedHabits);
+  
+  // Add to pending actions for sync
+  addPendingAction({
+    type,
+    data: offlineHabit
+  });
   
   return offlineHabit;
 };
@@ -159,13 +178,17 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
     
     // Handle offline mode
     if (!usingRealSupabase || !supabaseClient) {
-      return handleOfflineMode(habit);
+      const newId = uuidv4();
+      const habitWithId = { ...habit, id: newId } as Omit<Habit, 'createdAt' | 'userId'> & { id: string };
+      return handleOfflineMode(habitWithId, 'add');
     }
     
     // Get authenticated user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user?.id) {
-      return handleOfflineMode(habit);
+      const newId = uuidv4();
+      const habitWithId = { ...habit, id: newId } as Omit<Habit, 'createdAt' | 'userId'> & { id: string };
+      return handleOfflineMode(habitWithId, 'add');
     }
     
     const newHabit: Habit = {
@@ -197,14 +220,18 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
       console.error('Supabase error:', error);
       if (error.message.includes('JWT expired')) {
         console.log('Session expired, using offline mode');
-        return handleOfflineMode(habit);
+        const newId = uuidv4();
+        const habitWithId = { ...habit, id: newId } as Omit<Habit, 'createdAt' | 'userId'> & { id: string };
+        return handleOfflineMode(habitWithId, 'add');
       }
       throw error;
     }
     
     if (!data) {
       console.error('No data returned from Supabase insert');
-      return handleOfflineMode(habit);
+      const newId = uuidv4();
+      const habitWithId = { ...habit, id: newId } as Omit<Habit, 'createdAt' | 'userId'> & { id: string };
+      return handleOfflineMode(habitWithId, 'add');
     }
     
     // Type cast and validate the returned data
@@ -219,7 +246,7 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
     
     // Update local storage with the latest data
     const localHabits = await getHabits();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(localHabits));
+    storeHabits([...localHabits, insertedHabit]);
     
     console.log('Successfully added habit:', insertedHabit);
     return insertedHabit;
@@ -229,18 +256,9 @@ export const addHabit = async (habit: Omit<Habit, 'id' | 'createdAt' | 'userId'>
     // Only use localStorage if we have a network error
     if (error instanceof Error && error.message.includes('network')) {
       console.log('Network error, storing habit offline');
-      const offlineHabit: Habit = {
-        ...habit,
-        id: uuidv4(),
-        createdAt: Date.now(),
-        userId: 'offline'
-      };
-      
-      const habits = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      habits.push(offlineHabit);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
-      
-      return offlineHabit;
+      const newId = uuidv4();
+      const habitWithId = { ...habit, id: newId } as Omit<Habit, 'createdAt' | 'userId'> & { id: string };
+      return handleOfflineMode(habitWithId, 'add');
     }
     
     throw error;
@@ -261,10 +279,13 @@ export const updateHabit = async (id: string, updates: Partial<Omit<Habit, 'id' 
     if (userError || !user?.id) {
       console.log('No authenticated user, falling back to localStorage');
       const localHabits = getHabitsSync();
-      const filteredHabits = localHabits.filter(h => h.id !== id);
-      if (filteredHabits.length === localHabits.length) return false;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
-      return true;
+      const habitToUpdate = localHabits.find(h => h.id === id);
+      if (!habitToUpdate) return null;
+      
+      const updatedHabit = { ...habitToUpdate, ...updates };
+      const updatedHabits = localHabits.map(h => h.id === id ? updatedHabit : h);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHabits));
+      return updatedHabit;
     }
     
     // First verify the habit exists and belongs to the user
@@ -342,7 +363,12 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
     console.log('=== Deleting Habit ===');
     
     if (!isUsingRealSupabase() || !supabaseClient) {
-      throw new Error('No Supabase connection available');
+      const localHabits = getHabitsSync();
+      const habitToDelete = localHabits.find(h => h.id === id);
+      if (!habitToDelete) return false;
+      
+      await handleOfflineMode(habitToDelete, 'delete');
+      return true;
     }
     
     // Get authenticated user
@@ -350,9 +376,10 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
     if (userError || !user?.id) {
       console.log('No authenticated user, falling back to localStorage');
       const localHabits = getHabitsSync();
-      const filteredHabits = localHabits.filter(h => h.id !== id);
-      if (filteredHabits.length === localHabits.length) return false;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredHabits));
+      const habitToDelete = localHabits.find(h => h.id === id);
+      if (!habitToDelete) return false;
+      
+      await handleOfflineMode(habitToDelete, 'delete');
       return true;
     }
     

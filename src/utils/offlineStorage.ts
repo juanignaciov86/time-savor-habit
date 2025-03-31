@@ -1,5 +1,9 @@
 import { Habit } from './habitUtils';
 
+interface SyncManager {
+  register(tag: string): Promise<void>;
+}
+
 const HABITS_KEY = 'habits';
 const PENDING_ACTIONS_KEY = 'pendingActions';
 
@@ -12,7 +16,25 @@ export interface PendingAction {
 
 // Store habits in local storage
 export const storeHabits = (habits: Habit[]) => {
-  localStorage.setItem(HABITS_KEY, JSON.stringify(habits));
+  try {
+    const existingHabits = getStoredHabits();
+    // Merge with existing habits, preferring new ones
+    const mergedHabits = habits.map(habit => {
+      const existing = existingHabits.find(h => h.id === habit.id);
+      return existing ? { ...existing, ...habit } : habit;
+    });
+    
+    // Add any existing habits not in the new list
+    existingHabits.forEach(habit => {
+      if (!mergedHabits.some(h => h.id === habit.id)) {
+        mergedHabits.push(habit);
+      }
+    });
+    
+    localStorage.setItem(HABITS_KEY, JSON.stringify(mergedHabits));
+  } catch (error) {
+    console.error('Failed to store habits:', error);
+  }
 };
 
 // Get habits from local storage
@@ -34,8 +56,12 @@ export const addPendingAction = (action: Omit<PendingAction, 'id' | 'timestamp'>
   localStorage.setItem(PENDING_ACTIONS_KEY, JSON.stringify(pendingActions));
   
   // Request sync if possible
-  if ('serviceWorker' in navigator && 'sync' in registration) {
-    registration.sync.register('sync-habits');
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(registration => {
+      if ('sync' in registration && registration.sync) {
+        (registration.sync as SyncManager).register('sync-habits');
+      }
+    });
   }
 };
 
@@ -51,7 +77,26 @@ export const clearPendingActions = () => {
 };
 
 // Check online status
-export const isOnline = () => navigator.onLine;
+export const isOnline = () => {
+  // Check both navigator.onLine and try a fetch to verify real connectivity
+  if (!navigator.onLine) return false;
+  
+  // Return true for now, but start a background check
+  setTimeout(async () => {
+    try {
+      const response = await fetch('/ping');
+      const isReallyOnline = response.ok;
+      if (!isReallyOnline) {
+        window.dispatchEvent(new Event('offline'));
+      }
+    } catch (error) {
+      // If fetch fails, we're offline
+      window.dispatchEvent(new Event('offline'));
+    }
+  }, 0);
+  
+  return true;
+};
 
 // Register online/offline event listeners
 export const registerConnectivityListeners = (callbacks: {
@@ -60,8 +105,12 @@ export const registerConnectivityListeners = (callbacks: {
 }) => {
   window.addEventListener('online', () => {
     callbacks.onOnline?.();
-    if ('serviceWorker' in navigator && 'sync' in registration) {
-      registration.sync.register('sync-habits');
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        if ('sync' in registration && registration.sync) {
+          (registration.sync as SyncManager).register('sync-habits');
+        }
+      });
     }
   });
   

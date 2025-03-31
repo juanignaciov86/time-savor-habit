@@ -12,12 +12,20 @@ interface TimerProps {
 }
 
 const Timer: React.FC<TimerProps> = ({ onSessionComplete }) => {
-  const [isRunning, setIsRunning] = useState(false);
-  const [selectedHabit, setSelectedHabit] = useState<string | null>(null);
+  // Initialize state from localStorage if available
+  const storedState = localStorage.getItem('timer_state');
+  const initialState = storedState ? JSON.parse(storedState) : null;
+  
+  const [isRunning, setIsRunning] = useState(initialState?.isRunning || false);
+  const [selectedHabit, setSelectedHabit] = useState<string | null>(initialState?.selectedHabit || null);
   const [habits, setHabits] = useState<Habit[]>([]);
-  const startTimeRef = useRef<number | null>(null);
-  const lastTickRef = useRef<number | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const startTimeRef = useRef<number | null>(initialState?.startTime || null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(() => {
+    if (initialState?.isRunning && initialState?.startTime) {
+      return Math.floor((Date.now() - initialState.startTime) / 1000);
+    }
+    return 0;
+  });
 
   // Load habits on component mount
   useEffect(() => {
@@ -42,58 +50,67 @@ const Timer: React.FC<TimerProps> = ({ onSessionComplete }) => {
     });
   }, []);
 
-  // Effect for the timer using performance.now()
+
+
+  // Update elapsed time
   useEffect(() => {
-    let animationFrameId: number;
+    let intervalId: NodeJS.Timeout;
 
     const updateTimer = () => {
       if (!isRunning || !startTimeRef.current) return;
-
-      const now = performance.now();
-      if (!lastTickRef.current) lastTickRef.current = now;
-
-      // Update every second
-      if (now - lastTickRef.current >= 1000) {
-        const elapsed = Math.floor((now - startTimeRef.current) / 1000);
-        setElapsedSeconds(elapsed);
-        lastTickRef.current = now;
-      }
-
-      animationFrameId = requestAnimationFrame(updateTimer);
+      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setElapsedSeconds(elapsed);
     };
 
-    if (isRunning) {
-      if (!startTimeRef.current) {
-        startTimeRef.current = performance.now();
-      }
+    if (isRunning && startTimeRef.current) {
+      // Update immediately
       updateTimer();
+      // Then set up interval
+      intervalId = setInterval(updateTimer, 1000);
     }
 
     return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
+      if (intervalId) clearInterval(intervalId);
     };
   }, [isRunning]);
+
+  // Save timer state to localStorage
+  useEffect(() => {
+    if (isRunning && startTimeRef.current) {
+      const timerState = {
+        isRunning,
+        selectedHabit,
+        startTime: startTimeRef.current
+      };
+      localStorage.setItem('timer_state', JSON.stringify(timerState));
+    }
+  }, [isRunning, selectedHabit]);
+
+
 
   const toggleTimer = () => {
     if (!selectedHabit) return;
 
     if (!isRunning) {
       // Starting the timer
-      startTimeRef.current = performance.now();
-      lastTickRef.current = null;
+      const now = Date.now();
+      startTimeRef.current = now;
       setIsRunning(true);
+      // Save initial state
+      const timerState = {
+        isRunning: true,
+        selectedHabit,
+        startTime: now
+      };
+      localStorage.setItem('timer_state', JSON.stringify(timerState));
     } else {
       // Stopping the timer
       setIsRunning(false);
       if (elapsedSeconds > 0 && selectedHabit) {
-        const endTime = Date.now();
-        const startTime = endTime - (elapsedSeconds * 1000);
         onSessionComplete(elapsedSeconds, selectedHabit);
         setElapsedSeconds(0);
         startTimeRef.current = null;
-        lastTickRef.current = null;
+        localStorage.removeItem('timer_state');
       }
     }
   };

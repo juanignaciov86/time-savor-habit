@@ -8,13 +8,13 @@
       "src": "/pwa-icon-144.png",
       "type": "image/png",
       "sizes": "144x144",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/logo192.png",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/logo512.png",
@@ -34,5 +34,14 @@
   "prefer_related_applications": false,
   "categories": ["productivity", "lifestyle"],
   "lang": "en",
-  "dir": "ltr"
+  "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "View Habits",
+      "short_name": "Habits",
+      "description": "View your habit list",
+      "url": "/habits",
+      "icons": [{ "src": "/logo192.png", "sizes": "192x192" }]
+    }
+  ]
 }

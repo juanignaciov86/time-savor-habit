@@ -19,17 +19,42 @@ const queryClient = new QueryClient();
 // Protected route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [isAuthed, setIsAuthed] = React.useState<boolean | null>(null);
+  const [isOnline, setIsOnline] = React.useState(navigator.onLine);
 
   React.useEffect(() => {
     const checkAuth = async () => {
       const authed = await isAuthenticated();
       setIsAuthed(authed);
     };
+
+    // Check auth immediately
     checkAuth();
+
+    // Set up online/offline listeners
+    const handleOnline = () => {
+      setIsOnline(true);
+      checkAuth(); // Recheck auth when we go online
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  if (isAuthed === null) {
+  // Show loading state only briefly when online
+  if (isAuthed === null && isOnline) {
     return <div>Loading...</div>; // Or a proper loading spinner
+  }
+
+  // When offline, if we're still loading, assume authenticated
+  // This prevents flashing the login page when offline
+  if (!isOnline && isAuthed === null) {
+    return <>{children}</>;
   }
 
   if (!isAuthed) {

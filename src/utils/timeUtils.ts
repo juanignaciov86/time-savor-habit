@@ -1,6 +1,9 @@
 
 // Format seconds into HH:MM:SS format
 export const formatTime = (totalSeconds: number): string => {
+  // Ensure we don't have negative numbers
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
