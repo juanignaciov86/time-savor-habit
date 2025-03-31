@@ -47,6 +47,7 @@ export const supabaseClient = supabaseClientInstance;
 export const isUsingRealSupabase = () => {
   return (
     supabaseClient !== null &&
-    supabaseUrl !== DEFAULT_SUPABASE_URL
+    supabaseUrlEnv !== undefined &&
+    supabaseAnonKeyEnv !== undefined
   );
 };
