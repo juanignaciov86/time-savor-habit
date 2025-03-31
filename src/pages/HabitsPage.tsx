@@ -32,6 +32,9 @@ const HabitsPage: React.FC = () => {
   // Load habits and initialize sync
   useEffect(() => {
     const loadHabits = async () => {
+      // Clear habits first
+      setHabits([]);
+      
       try {
         setIsLoading(true);
         // Initialize Supabase sync
@@ -55,16 +58,13 @@ const HabitsPage: React.FC = () => {
     loadHabits();
     
     // Listen for auth changes
-    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
-      async (event) => {
-        if (event === 'SIGNED_IN') {
-          // Reload habits after sign-in
-          const habitsList = await getHabits();
-          setHabits(habitsList);
-        }
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        await loadHabits();
       }
-    );
-    
+    });
+
     // Cleanup subscription
     return () => {
       subscription.unsubscribe();
