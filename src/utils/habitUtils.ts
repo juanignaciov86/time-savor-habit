@@ -428,6 +428,11 @@ export const deleteHabit = async (id: string): Promise<boolean> => {
   }
 };
 
+function getPendingActions() {
+  const stored = localStorage.getItem('pendingActions');
+  return stored ? JSON.parse(stored) : [];
+}
+
 // Initialize Supabase table if it doesn't exist
 export const initializeSupabaseSync = async () => {
   try {
@@ -458,44 +463,123 @@ export const initializeSupabaseSync = async () => {
     
     if (fetchError) throw fetchError;
     
-    // Get local habits
-    const localData = localStorage.getItem(STORAGE_KEY);
-    const localHabits = localData ? (JSON.parse(localData) as Habit[]) : [];
+    // Get local habits and pending actions
+    const localHabits = getStoredHabits();
+    const pendingActions = getPendingActions();
     
     console.log('Found habits:', {
       supabase: supabaseHabits?.length || 0,
-      local: localHabits.length
+      local: localHabits.length,
+      pending: pendingActions.length
     });
-    
-    // Check if we have Supabase data
+
+    // If we have pending actions, process them first
+    if (pendingActions.length > 0) {
+      console.log('Processing pending actions');
+      for (const action of pendingActions) {
+        try {
+          switch (action.type) {
+            case 'add':
+              // Convert to server format
+              const addPayload = {
+                id: action.data.id,
+                name: action.data.name,
+                description: action.data.description,
+                color: action.data.color,
+                created_at: action.data.createdAt,
+                user_id: user.id
+              };
+              await supabaseClient.from('habits').upsert(addPayload);
+              break;
+
+            case 'update':
+              const updatePayload = {
+                name: action.data.name,
+                description: action.data.description,
+                color: action.data.color
+              };
+              await supabaseClient
+                .from('habits')
+                .update(updatePayload)
+                .eq('id', action.data.id)
+                .eq('user_id', user.id);
+              break;
+
+            case 'delete':
+              await supabaseClient
+                .from('habits')
+                .delete()
+                .eq('id', action.data.id)
+                .eq('user_id', user.id);
+              break;
+          }
+        } catch (error) {
+          console.error(`Failed to process ${action.type} action:`, error);
+        }
+      }
+      
+      // Clear pending actions after processing
+      clearPendingActions();
+      
+      // Refresh Supabase data after processing actions
+      const { data: updatedHabits, error: refreshError } = await supabaseClient
+        .from('habits')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (!refreshError && updatedHabits) {
+        // Update local storage with latest data
+        const formattedHabits = updatedHabits.map(habit => ({
+          id: String(habit.id),
+          name: String(habit.name),
+          description: String(habit.description || ''),
+          color: String(habit.color),
+          createdAt: Number(habit.created_at),
+          userId: String(habit.user_id)
+        }));
+        
+        storeHabits(formattedHabits);
+        return;
+      }
+    }
+
+    // If no pending actions or after processing them, use Supabase data as source of truth
     if (supabaseHabits && supabaseHabits.length > 0) {
       console.log('Using Supabase data as source of truth');
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(supabaseHabits));
+      const formattedHabits = supabaseHabits.map(habit => ({
+        id: String(habit.id),
+        name: String(habit.name),
+        description: String(habit.description || ''),
+        color: String(habit.color),
+        createdAt: Number(habit.created_at),
+        userId: String(habit.user_id)
+      }));
+      
+      storeHabits(formattedHabits);
       return;
     }
     
-    // Keep using local data if Supabase is empty
-    console.log('No Supabase data found, keeping local data');
-    
+    // If Supabase is empty but we have local data, migrate it
     if (localHabits.length > 0) {
       console.log('Migrating local habits to Supabase');
-      // Migrate local habits to Supabase
-      const habitsWithUserId = localHabits.map(habit => ({
-        ...habit,
+      const habitsToMigrate = localHabits.map(habit => ({
+        id: habit.id,
+        name: habit.name,
+        description: habit.description,
+        color: habit.color,
+        created_at: habit.createdAt,
         user_id: user.id
       }));
       
       const { error: upsertError } = await supabaseClient
         .from('habits')
-        .upsert(habitsWithUserId)
-        .select();
+        .upsert(habitsToMigrate);
       
       if (upsertError) throw upsertError;
-      
       console.log('Successfully migrated local habits to Supabase');
     }
   } catch (error) {
     console.error('Failed to initialize Supabase sync:', error);
-    throw error; // Re-throw to handle in the calling code
+    throw error;
   }
 };

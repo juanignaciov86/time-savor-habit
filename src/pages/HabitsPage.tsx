@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { Button } from "@/components/ui/button";
@@ -63,6 +62,11 @@ const HabitsPage: React.FC = () => {
           await initializeSupabaseSync();
           const habitsList = await getHabits();
           setHabits(habitsList);
+          toast({
+            title: "Sync Complete",
+            description: "Your habits have been synchronized with the server",
+            variant: "default"
+          });
         } catch (error) {
           if (!error.message.includes('network')) {
             toast({
@@ -93,11 +97,11 @@ const HabitsPage: React.FC = () => {
         setIsOnlineState(false);
         toast({
           title: "Offline Mode",
-          description: "Changes will sync when back online."
+          description: "Changes will be saved locally and synced when back online."
         });
       }
     });
-    
+
     // Initial load - always load, even if offline
     loadHabits();
     
@@ -111,7 +115,6 @@ const HabitsPage: React.FC = () => {
       }
     });
 
-    // Cleanup subscriptions
     return () => {
       cleanup();
       subscription.unsubscribe();

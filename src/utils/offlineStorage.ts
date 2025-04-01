@@ -103,8 +103,11 @@ export const registerConnectivityListeners = (callbacks: {
   onOnline?: () => void;
   onOffline?: () => void;
 }) => {
-  window.addEventListener('online', () => {
-    callbacks.onOnline?.();
+  window.addEventListener('online', async () => {
+    // Get pending actions first
+    const pendingActions = getPendingActions();
+    
+    // Check for Supabase client and authentication
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(registration => {
         if ('sync' in registration && registration.sync) {
@@ -112,6 +115,9 @@ export const registerConnectivityListeners = (callbacks: {
         }
       });
     }
+    
+    // Call the provided callback
+    callbacks.onOnline?.();
   });
   
   window.addEventListener('offline', () => {

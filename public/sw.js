@@ -289,23 +289,99 @@ async function syncHabits() {
   try {
     const pendingActions = await getPendingActions();
     
+    if (pendingActions.length === 0) {
+      console.log('No pending actions to sync');
+      return;
+    }
+
+    console.log('Syncing pending actions:', pendingActions.length);
+    
     for (const action of pendingActions) {
-      switch (action.type) {
-        case 'add':
-          await syncAddHabit(action.data);
-          break;
-        case 'update':
-          await syncUpdateHabit(action.data);
-          break;
-        case 'delete':
-          await syncDeleteHabit(action.data);
-          break;
+      try {
+        switch (action.type) {
+          case 'add':
+            await syncAddHabit(action.data);
+            break;
+          case 'update':
+            await syncUpdateHabit(action.data);
+            break;
+          case 'delete':
+            await syncDeleteHabit(action.data);
+            break;
+        }
+      } catch (error) {
+        console.error(`Failed to sync action ${action.id}:`, error);
+        // Keep failing action in pending queue
+        continue;
       }
     }
     
-    // Clear pending actions after successful sync
+    // Clear successfully synced actions
     await clearPendingActions();
   } catch (error) {
     console.error('Sync failed:', error);
   }
+}
+
+async function syncAddHabit(habit) {
+  const response = await fetch('/api/habits', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${await getAuthToken()}`
+    },
+    body: JSON.stringify(habit)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to sync habit: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function syncUpdateHabit(habit) {
+  const response = await fetch(`/api/habits/${habit.id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${await getAuthToken()}`
+    },
+    body: JSON.stringify(habit)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update habit: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function syncDeleteHabit(habit) {
+  const response = await fetch(`/api/habits/${habit.id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${await getAuthToken()}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete habit: ${response.statusText}`);
+  }
+}
+
+async function getAuthToken() {
+  const authData = localStorage.getItem('sb-auth-token');
+  return authData ? JSON.parse(authData).access_token : null;
+}
+
+// Helper function to get pending actions from localStorage
+function getPendingActions() {
+  const stored = localStorage.getItem('pendingActions');
+  return stored ? JSON.parse(stored) : [];
+}
+
+// Helper function to clear pending actions from localStorage
+function clearPendingActions() {
+  localStorage.removeItem('pendingActions');
 }
